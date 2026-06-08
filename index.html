@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>宇宙舞曲1977</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #ffffff; }
+    #native-white-screen {
+      position: fixed; inset: 0; background: #ffffff;
+      z-index: 99999; pointer-events: none; opacity: 0;
+      transition: opacity 1s cubic-bezier(0.23, 1, 0.32, 1);
+      display: none; /* 【修复】默认隐藏，避免初始白屏 */
+    }
+    #native-white-screen.is-active { opacity: 1; display: block; }
+  </style>
+
+  <!-- ============================================
+       【修复】只保留本地 Ammo.js WASM 完整版
+       移除重复的 CDN 引用，避免 WASM 加载冲突
+       ============================================ -->
+  <script src="/ammo/ammo.wasm.js"></script>
+
+  <!-- 备选：如果上面 WASM 始终加载失败，注释掉上面一行，改用下面这行（asm.js 完整版，纯JS） -->
+  <!-- <script src="/ammo/ammo.js"></script> -->
+</head>
+<body>
+  <div id="app"></div>
+  <div id="native-white-screen"></div>
+  <script>
+    // 【修复】show/hide 增加 DOM 元素判空，防止 null.classList 报错导致白屏
+    window.__nativeScreen = {
+      show() {
+        const el = document.getElementById('native-white-screen');
+        if (el) {
+          el.classList.add('is-active');
+          console.log('[nativeScreen] 白幕显示');
+        } else {
+          console.warn('[nativeScreen] show(): 白幕元素不存在');
+        }
+      },
+      hide() {
+        const el = document.getElementById('native-white-screen');
+        if (el) {
+          el.classList.remove('is-active');
+          console.log('[nativeScreen] 白幕隐藏');
+        } else {
+          console.warn('[nativeScreen] hide(): 白幕元素不存在');
+        }
+      }
+    };
+  </script>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

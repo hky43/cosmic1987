@@ -1,0 +1,722 @@
+/* ========================================
+   UserProgressPage.css — 游戏暂停界面风格
+   ======================================== */
+
+/* ---------- CSS 变量系统 ---------- */
+:root {
+  --upg-bg-dark: rgba(15, 15, 25, 0.95);
+  --upg-bg-panel: rgba(255, 255, 255, 0.08);
+  --upg-bg-card: rgba(255, 255, 255, 0.06);
+  
+  --upg-glass-bg: rgba(255, 255, 255, 0.1);
+  --upg-glass-border: rgba(255, 255, 255, 0.15);
+  --upg-glass-hover: rgba(255, 255, 255, 0.15);
+  
+  --upg-text: #ffffff;
+  --upg-text-dim: rgba(255, 255, 255, 0.6);
+  
+  --upg-accent: #c9a227;
+  --upg-accent-glow: rgba(201, 162, 39, 0.4);
+  --upg-accent-secondary: #4facfe;
+  
+  --upg-radius-sm: 12px;
+  --upg-radius-md: 16px;
+  --upg-radius-lg: 20px;
+  --upg-radius-xl: 28px;
+  
+  --upg-transition: 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+  --upg-transition-fast: 0.3s ease;
+}
+
+/* ---------- 页面容器 ---------- */
+.user-progress-page {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  transform: translateX(100%);
+  transition: transform var(--upg-transition);
+  will-change: transform;
+  z-index: 150;
+  
+  /* 左右分栏布局 */
+  display: grid;
+  grid-template-columns: 320px 1fr;
+}
+
+.user-progress-page.slide-in-from-right {
+  transform: translateX(0);
+}
+
+/* ---------- 毛玻璃背景层 ---------- */
+.progress-background {
+  position: fixed;
+  inset: 0;
+  background: var(--upg-bg-dark);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  z-index: 0;
+}
+
+/* ---------- 左侧功能面板 ---------- */
+.left-panel {
+  position: relative;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.03);
+  border-right: 1px solid var(--upg-glass-border);
+  padding: 30px 25px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  
+  /* 隐藏滚动条 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.left-panel::-webkit-scrollbar {
+  display: none;
+}
+
+.panel-header {
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--upg-glass-border);
+}
+
+.panel-header h2 {
+  color: var(--upg-text);
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 1px;
+}
+
+/* ---------- 音频控制模块 ---------- */
+.audio-module {
+  background: var(--upg-glass-bg);
+  border: 1px solid var(--upg-glass-border);
+  border-radius: var(--upg-radius-lg);
+  padding: 24px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.module-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--upg-text);
+  margin-bottom: 20px;
+  letter-spacing: 0.5px;
+}
+
+.audio-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid var(--upg-glass-border);
+  border-radius: var(--upg-radius-md);
+  color: var(--upg-text);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--upg-transition-fast);
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.audio-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+.audio-toggle:active {
+  transform: translateY(0);
+}
+
+.audio-toggle.is-playing {
+  background: linear-gradient(135deg, rgba(201, 162, 39, 0.2), rgba(79, 172, 254, 0.2));
+  border-color: var(--upg-accent);
+  box-shadow: 0 0 20px var(--upg-accent-glow);
+}
+
+.toggle-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  transition: all var(--upg-transition-fast);
+}
+
+.audio-toggle.is-playing .toggle-icon {
+  background: var(--upg-accent);
+  color: #000;
+}
+
+.toggle-text {
+  flex: 1;
+  text-align: left;
+}
+
+/* 音量控制 */
+.volume-control {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--upg-glass-border);
+}
+
+.volume-label {
+  display: block;
+  font-size: 13px;
+  color: var(--upg-text-dim);
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+.volume-slider-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.volume-slider {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--upg-accent);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 10px var(--upg-accent-glow);
+  transition: transform 0.2s ease;
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--upg-accent);
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 10px var(--upg-accent-glow);
+  transition: transform 0.2s ease;
+}
+
+.volume-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+}
+
+.volume-value {
+  font-size: 14px;
+  color: var(--upg-text);
+  min-width: 40px;
+  text-align: right;
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+}
+
+/* 音频可视化效果 */
+.audio-visualizer {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--upg-glass-border);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  height: 60px;
+}
+
+.visualizer-bar {
+  width: 6px;
+  background: linear-gradient(to top, var(--upg-accent), var(--upg-accent-secondary));
+  border-radius: 3px;
+  animation: visualize 1s ease-in-out infinite;
+}
+
+@keyframes visualize {
+  0%, 100% {
+    height: 10px;
+    opacity: 0.4;
+  }
+  50% {
+    height: 50px;
+    opacity: 1;
+  }
+}
+
+/* 预留功能区域 */
+.placeholder-section {
+  background: var(--upg-glass-bg);
+  border: 1px solid var(--upg-glass-border);
+  border-radius: var(--upg-radius-lg);
+  padding: 40px 24px;
+  text-align: center;
+  border: 2px dashed var(--upg-glass-border);
+}
+
+.placeholder-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.placeholder-icon {
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+.placeholder-content p {
+  color: var(--upg-text-dim);
+  font-size: 15px;
+  margin: 0;
+}
+
+.placeholder-content small {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+}
+
+/* ---------- 返回按钮 ---------- */
+.back-btn {
+  position: fixed;
+  top: 25px;
+  right: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 28px;
+  color: var(--upg-text);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 2px solid var(--upg-glass-border);
+  border-radius: var(--upg-radius-xl);
+  background: var(--upg-glass-bg);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  z-index: 160;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: all var(--upg-transition-fast);
+  will-change: transform;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+}
+
+.back-btn:hover {
+  background: var(--upg-glass-hover);
+  transform: scale(1.05);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.back-btn:active {
+  transform: scale(0.95);
+}
+
+.back-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* ---------- 右侧内容区域 ---------- */
+.progress-content {
+  position: relative;
+  z-index: 10;
+  padding: 90px 50px 50px;
+  color: var(--upg-text);
+  overflow-y: auto;
+  
+  /* 隐藏滚动条 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.progress-content::-webkit-scrollbar {
+  display: none;
+}
+
+.page-title {
+  font-size: 48px;
+  font-weight: 800;
+  text-align: center;
+  margin-bottom: 50px;
+  background: linear-gradient(135deg, #fff 0%, var(--upg-accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
+  letter-spacing: 2px;
+}
+
+/* ---------- 卡片系统 ---------- */
+.progress-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.progress-card {
+  background: var(--upg-bg-card);
+  border: 1px solid var(--upg-glass-border);
+  border-radius: var(--upg-radius-lg);
+  padding: 28px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: all var(--upg-transition-fast);
+}
+
+.progress-card:hover {
+  background: var(--upg-glass-hover);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.card-icon {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.card-header h3 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--upg-text);
+}
+
+/* ---------- 进度条 ---------- */
+.progress-bar-container {
+  width: 100%;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 14px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--upg-accent) 0%, var(--upg-accent-secondary) 100%);
+  border-radius: 12px;
+  transition: width 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+  box-shadow: 0 0 15px var(--upg-accent-glow);
+  position: relative;
+}
+
+.progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.progress-text {
+  font-size: 16px;
+  opacity: 0.85;
+  margin: 0;
+  text-align: center;
+  color: var(--upg-text-dim);
+  font-weight: 500;
+}
+
+/* ---------- 成就网格 ---------- */
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.achievement-item {
+  aspect-ratio: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid var(--upg-glass-border);
+  border-radius: var(--upg-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--upg-transition-fast);
+  opacity: 0.35;
+  filter: grayscale(100%) blur(1px);
+}
+
+.achievement-item.unlocked {
+  opacity: 1;
+  filter: grayscale(0%) blur(0);
+  background: var(--upg-glass-hover);
+  border-color: var(--upg-accent);
+  box-shadow: 0 0 20px var(--upg-accent-glow);
+}
+
+.achievement-item.unlocked:hover {
+  transform: scale(1.15) rotate(5deg);
+  box-shadow: 0 0 30px var(--upg-accent-glow);
+}
+
+.achievement-icon {
+  font-size: 30px;
+  line-height: 1;
+}
+
+/* ---------- 统计网格 ---------- */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 24px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--upg-radius-sm);
+  border: 1px solid var(--upg-glass-border);
+  transition: all var(--upg-transition-fast);
+}
+
+.stat-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.05);
+  border-color: var(--upg-accent);
+}
+
+.stat-value {
+  display: block;
+  font-size: 40px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, #fff, var(--upg-accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.stat-label {
+  display: block;
+  font-size: 13px;
+  opacity: 0.7;
+  color: var(--upg-text-dim);
+  letter-spacing: 0.5px;
+}
+
+/* ---------- 页脚 ---------- */
+.progress-footer {
+  margin-top: 60px;
+  padding: 35px 25px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border-radius: var(--upg-radius-md);
+  border: 1px solid var(--upg-glass-border);
+}
+
+.progress-footer .footer-content {
+  text-align: center;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.progress-footer p {
+  font-size: 14px;
+  opacity: 0.7;
+  margin-bottom: 18px;
+  color: var(--upg-text-dim);
+}
+
+.progress-footer .footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.progress-footer .footer-link {
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
+  font-size: 13px;
+  transition: all var(--upg-transition-fast);
+  position: relative;
+  padding: 5px 0;
+  letter-spacing: 0.5px;
+}
+
+.progress-footer .footer-link:hover {
+  color: var(--upg-accent);
+}
+
+.progress-footer .footer-link::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: var(--upg-accent);
+  transition: width var(--upg-transition-fast);
+}
+
+.progress-footer .footer-link:hover::after {
+  width: 100%;
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 1024px) {
+  .user-progress-page {
+    grid-template-columns: 280px 1fr;
+  }
+  
+  .left-panel {
+    padding: 25px 20px;
+  }
+  
+  .progress-content {
+    padding: 80px 35px 40px;
+  }
+}
+
+@media (max-width: 768px) {
+  .user-progress-page {
+    grid-template-columns: 1fr;
+  }
+  
+  .left-panel {
+    position: relative;
+    border-right: none;
+    border-bottom: 1px solid var(--upg-glass-border);
+    max-height: 40vh;
+    padding: 20px;
+  }
+  
+  .progress-content {
+    padding: 70px 20px 40px;
+  }
+
+  .page-title {
+    font-size: 36px;
+    margin-bottom: 35px;
+  }
+
+  .progress-card {
+    padding: 22px;
+  }
+
+  .card-header h3 {
+    font-size: 19px;
+  }
+
+  .achievement-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .stat-value {
+    font-size: 32px;
+  }
+
+  .progress-footer {
+    padding: 28px 18px;
+  }
+
+  .progress-footer p {
+    font-size: 12px;
+  }
+
+  .progress-footer .footer-links {
+    gap: 18px;
+  }
+
+  .progress-footer .footer-link {
+    font-size: 11px;
+  }
+  
+  .back-btn {
+    top: 15px;
+    right: 15px;
+    padding: 12px 22px;
+    font-size: 14px;
+  }
+}
+
+/* ---------- 无障碍：减少动画 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .user-progress-page,
+  .progress-bar,
+  .back-btn,
+  .progress-card,
+  .achievement-item,
+  .stat-item,
+  .progress-footer .footer-link::after,
+  .visualizer-bar {
+    transition: none !important;
+    animation: none !important;
+  }
+  
+  .back-btn:hover,
+  .back-btn:active,
+  .progress-card:hover,
+  .achievement-item.unlocked:hover,
+  .stat-item:hover,
+  .audio-toggle:hover {
+    transform: none !important;
+  }
+}

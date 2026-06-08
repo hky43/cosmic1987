@@ -1,0 +1,19 @@
+/* 引入像素字体 */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+/* 引入中文像素风格字体 */
+@import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
+
+/* 全局样式 - 设置黑色背景，消除白色区域 */
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #000 !important; /* 将白色背景替换为黑色 */
+  /* overflow: hidden; 已注释 - 允许页面正常滚动 */
+}
+
+#app {
+  background-color: #000 !important; /* 确保app容器也是黑色 */
+  min-height: 100vh; /* 确保至少占满视口高度 */
+}
+
+/* =============================================== */
