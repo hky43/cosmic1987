@@ -882,10 +882,17 @@ const stopLyricsUpdate = () => {
 
 // 图片切换
 let fadeTimeout = null;
+let imageDisplayStartTime = 0; // 当前图片开始展示的时间戳，用于冷却判定
 
 const switchImage = (direction) => {
   if (isTransitioning.value) return;
   if (currentPhase.value === 31) return;
+
+  // 冷却检查：每张图片有最短展示时长，未到时间不允许切换
+  const cooldown = imageDelays[currentImageIndex.value] || 1500;
+  const elapsed = Date.now() - imageDisplayStartTime;
+  if (elapsed < cooldown) return;
+
   if (fadeTimeout) {
     clearTimeout(fadeTimeout);
     fadeTimeout = null;
@@ -910,19 +917,17 @@ const switchImage = (direction) => {
       preloadLyrics(currentImageIndex.value);
     });
 
-    const currentDelay =
-      imageDelays[currentImageIndex.value] ||
-      animationConfig.defaultSwitchDelay;
-
+    // 无空白等待：fade-out 后立即 fade-in，消除卡顿感
     fadeTimeout = setTimeout(() => {
       isImageFadingIn.value = true;
+      imageDisplayStartTime = Date.now(); // 记录新图片展示起始时间
       fadeTimeout = setTimeout(() => {
         isImageFadingIn.value = false;
         isImageVisible.value = true;
         isTransitioning.value = false;
         fadeTimeout = null;
       }, animationConfig.fadeInDuration);
-    }, currentDelay);
+    }, 50); // 极短间隙确保 DOM 更新
   }, animationConfig.fadeOutDuration);
 };
 
@@ -983,6 +988,7 @@ const init = () => {
         isImageVisible.value = false;
         setTimeout(() => {
           isImageFadingIn.value = true;
+          imageDisplayStartTime = Date.now();
           setTimeout(() => {
             isImageFadingIn.value = false;
             isImageVisible.value = true;

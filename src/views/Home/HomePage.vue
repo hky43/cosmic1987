@@ -624,8 +624,9 @@ const router = useRouter();
 // 使用 localStorage 持久化动画状态，确保动画只播放一次
 const hasPlayedIntroAnimation =
   localStorage.getItem("hasPlayedIntroAnimation") === "true";
-// modelDropping 初始为 true，因为没有加载动画了
-const modelDropping = ref(true);
+// modelDropping 初始为 false，等待加载动画完成后再触发下落
+// 如果初始为 true，CSS 动画会在加载画面背后偷偷播完，用户看不到
+const modelDropping = ref(false);
 const isTopLeaving = ref(false);
 const isFeatureLocked = ref(false);
 const isZone3Visible = ref(false);

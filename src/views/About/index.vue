@@ -221,7 +221,7 @@ import * as THREE from "three";
 import Matter from "matter-js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { useRouter } from "vue-router"; // 【新增】引入路由
+import { useRouter, useRoute } from "vue-router"; // 【新增】引入路由
 import WaveBackground from "../../components/views/about/WaveBackground.vue";
 import BackToHomeButton from "../../components/BackToHomeButton.vue";
 import { asset } from "@/utils/asset";
@@ -229,6 +229,7 @@ import { asset } from "@/utils/asset";
 defineOptions({ name: "AboutPage" });
 
 const router = useRouter();
+const route = useRoute();
 const setPageReady = inject("setPageReady", () => {}); // 【新增】创建 router 实例
 
 const WIDTH = 900;
@@ -1510,9 +1511,8 @@ onMounted(async () => {
     [50, 100, 300, 500, 1000].forEach((d) => setTimeout(killOverlays, d));
 
     // 2. 在初始化之前就检查是否需要跳过发射阶段
-    const urlParams = new URLSearchParams(window.location.search);
     const skipAiming = sessionStorage.getItem("skipAiming");
-    const mode = urlParams.get("mode");
+    const mode = /** @type {string|undefined} */ (route.query.mode);
 
     // 设置跳过标志
     shouldSkipAiming = skipAiming === "true" || mode === "showcase";

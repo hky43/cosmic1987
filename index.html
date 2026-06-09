@@ -15,14 +15,13 @@
     #native-white-screen.is-active { opacity: 1; display: block; }
   </style>
 
-  <!-- ============================================
-       【修复】只保留本地 Ammo.js WASM 完整版
-       移除重复的 CDN 引用，避免 WASM 加载冲突
-       ============================================ -->
-  <script src="/ammo/ammo.wasm.js"></script>
+  <!--
+       Ammo.js WASM 暂时禁用（后续需要时取消注释）
+  -->
+  <!-- <script src="./ammo/ammo.wasm.js"></script> -->
 
-  <!-- 备选：如果上面 WASM 始终加载失败，注释掉上面一行，改用下面这行（asm.js 完整版，纯JS） -->
-  <!-- <script src="/ammo/ammo.js"></script> -->
+  <!-- 备选：asm.js 完整版（纯JS），不依赖 WASM -->
+  <!-- <script src="./ammo/ammo.js"></script> -->
 </head>
 <body>
   <div id="app"></div>

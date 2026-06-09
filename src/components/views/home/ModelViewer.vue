@@ -226,7 +226,7 @@ function init() {
       const center = bbox.getCenter(new THREE.Vector3());
       const size = bbox.getSize(new THREE.Vector3());
       const maxDim = Math.max(size.x, size.y, size.z);
-      const scale = 1.8 / maxDim;
+      const scale = 2.5 / maxDim;
       model.scale.setScalar(scale);
       model.position.sub(center.clone().multiplyScalar(scale));
       model.position.y += 0.1;
@@ -256,7 +256,11 @@ function init() {
 
       scene.add(model);
       console.log("[Helmet3D] 模型加载成功");
-      triggerDropOnce();
+      if (props.active) {
+        triggerDropOnce();
+      } else {
+        console.log("[Helmet3D] 模型就绪，等待 active 变为 true 再触发下落");
+      }
     },
     (xhr) => {
       if (xhr.lengthComputable) {

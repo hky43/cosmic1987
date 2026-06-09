@@ -97,7 +97,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from "vue";
+import {
+  ref,
+  onMounted,
+  onBeforeUnmount,
+  onActivated,
+  onDeactivated,
+} from "vue";
 
 // ============================================
 // 全量导入 babylon-mmd（防止 Tree-shaking）
@@ -958,9 +964,8 @@ async function initAndLoad() {
     // ========== 1. 创建引擎和场景 ==========
     initEngine();
 
-    // ========== 2. 动态加载并初始化 Ammo.js（核心步骤）==========
-    // 【测试选项】设置为 true 可跳过物理引擎，快速测试模型加载
-    const SKIP_PHYSICS = false;
+    // ========== 2. Ammo.js 物理引擎（暂时禁用，后续需要时改为 false）==========
+    const SKIP_PHYSICS = true;
 
     if (!SKIP_PHYSICS) {
       try {
@@ -1000,6 +1005,36 @@ async function initAndLoad() {
 
 onMounted(() => {
   initAndLoad();
+});
+
+onActivated(() => {
+  console.log("[MmdPlayer] 页面激活，恢复引擎");
+  if (engine) {
+    engine.resize();
+    console.log("[MmdPlayer] 引擎尺寸已修正");
+  }
+  if (mmdRuntime && isPlaying.value) {
+    mmdRuntime.playAnimation();
+  }
+  if (audioPlayer && isPlaying.value) {
+    audioPlayer.play();
+  }
+  if (videoBgTexture?.video && isPlaying.value) {
+    videoBgTexture.video.play();
+  }
+});
+
+onDeactivated(() => {
+  console.log("[MmdPlayer] 页面停用，暂停资源");
+  if (mmdRuntime && isPlaying.value) {
+    mmdRuntime.pauseAnimation();
+  }
+  if (audioPlayer) {
+    audioPlayer.pause();
+  }
+  if (videoBgTexture?.video) {
+    videoBgTexture.video.pause();
+  }
 });
 
 onBeforeUnmount(() => {
