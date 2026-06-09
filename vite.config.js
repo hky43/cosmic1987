@@ -52,37 +52,31 @@ function wasmMimeTypePlugin() {
 // 【关键】处理 wasm-bindgen-rayon 的 IIFE 问题
 // ============================================
 function wasmBindgenRayonFixPlugin() {
+  const STUB_CODE = `
+export function startWorkers(numThreads) {}
+export function initThreadPool(numThreads) {}
+export function getWorkerId() { return 0; }
+export function spawn(fn) { return Promise.resolve(fn()); }
+export function asyncify(fn) { return fn; }
+`;
   return {
     name: 'wasm-bindgen-rayon-fix',
+    enforce: 'pre',
     async resolveId(id, importer, options) {
-      // 拦截 wasm-bindgen-rayon 的 Worker 文件
       if (id.includes('wasm-bindgen-rayon') && id.includes('workerHelpers')) {
-        // 返回一个唯一的 ID 来标记这个模块
         return '\0wasm-bindgen-rayon-worker-helpers';
       }
       return null;
     },
+    async transform(code, id) {
+      if (id.includes('wasm-bindgen-rayon') && id.includes('workerHelpers')) {
+        return STUB_CODE;
+      }
+      return null;
+    },
     async load(id) {
-      // 如果是 wasm-bindgen-rayon 的 Worker 文件，返回一个兼容的 ESM 模块
       if (id === '\0wasm-bindgen-rayon-worker-helpers') {
-        return `
-export function startWorkers(numThreads) {
-  // 空实现，避免构建错误
-  console.warn('wasm-bindgen-rayon worker helpers not available in this build');
-}
-export function initThreadPool(numThreads) {
-  // 空实现，避免构建错误
-}
-export function getWorkerId() {
-  return 0;
-}
-export function spawn(fn) {
-  return Promise.resolve(fn());
-}
-export function asyncify(fn) {
-  return fn;
-}
-`;
+        return STUB_CODE;
       }
       return null;
     },
@@ -156,8 +150,8 @@ export default defineConfig({
   },
 
   build: {
-    // 不复制 public（大文件在 COS）
-    copyPublicDir: false,
+    // 【修复】复制 public 目录（包含 ammo/ 文件夹）
+    copyPublicDir: true,
     target: 'esnext',
     chunkSizeWarningLimit: 2000,
     assetsInlineLimit: 0,
@@ -165,16 +159,21 @@ export default defineConfig({
       transformMixedEsModules: true,
     },
     rollupOptions: {
-      // 将 babylon-mmd 及其子模块排除在构建之外
+      // 【修复】移除 babylon-mmd 外部依赖配置，让它被正确打包
       external: [
-        'babylon-mmd',
-        /^babylon-mmd\/.*/,
+        // 'babylon-mmd',
+        // /^babylon-mmd\/.*/,
       ],
       output: {
-        manualChunks: {
-          'babylon-core': ['@babylonjs/core'],
-          'babylon-loaders': ['@babylonjs/loaders', '@babylonjs/materials'],
-          'vue-vendor': ['vue', 'vue-router'],
+        manualChunks(id) {
+          // 只对 node_modules 中的包进行手动分块
+          if (id.includes('node_modules')) {
+            if (id.includes('babylon-mmd')) return 'babylon-mmd';
+            if (id.includes('@babylonjs/core')) return 'babylon-core';
+            if (id.includes('@babylonjs/loaders') || id.includes('@babylonjs/materials')) return 'babylon-loaders';
+            if (id.includes('vue') && !id.includes('vue-router') && !id.includes('pinia')) return 'vue-vendor';
+            if (id.includes('vue-router')) return 'vue-vendor';
+          }
         },
       },
     },

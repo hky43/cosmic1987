@@ -810,12 +810,60 @@ async function loadAmmo() {
       return;
     }
 
+    // 获取基础路径（用于 GitHub Pages 部署）
+    const basePath = import.meta.env.BASE_URL || "/";
+    console.log(`[Ammo] 基础路径: ${basePath}`);
+
+    // 如果 Ammo 已通过 HTML 中的 script 标签预加载（window.Ammo 已定义），
+    // 则直接调用 Ammo() 初始化，避免重复加载脚本
+    if (typeof window.Ammo === "function") {
+      console.log("[Ammo] 检测到预加载的 Ammo，直接初始化...");
+
+      // 探测 WASM 文件名以配置正确的路径
+      const possibleNames = ["ammo.wasm.wasm", "ammo.wasm"];
+      let wasmFileName = "ammo.wasm.wasm";
+      for (const name of possibleNames) {
+        try {
+          const resp = await fetch(`${basePath}ammo/${name}`, {
+            method: "HEAD",
+          });
+          if (resp.status === 200) {
+            wasmFileName = name;
+            break;
+          }
+        } catch (e) {
+          // 继续尝试
+        }
+      }
+
+      // 配置 Module.locateFile（必须在 Ammo() 调用前设置）
+      window.Module = window.Module || {};
+      window.Module.locateFile = (file) => {
+        if (file.endsWith(".wasm")) {
+          return `${basePath}ammo/${wasmFileName}`;
+        }
+        return `${basePath}ammo/${file}`;
+      };
+
+      try {
+        const instance = await window.Ammo();
+        window.__ammoInstance = instance;
+        console.log("[Ammo] WASM 实例化成功（复用预加载）");
+        resolve(instance);
+      } catch (wasmErr) {
+        reject(new Error(`WASM 实例化失败: ${wasmErr.message}`));
+      }
+      return;
+    }
+
+    // === 以下为动态加载逻辑（Ammo 未预加载时使用）===
+
     // 探测 public/ammo/ 目录下实际存在的 WASM 文件名
     const possibleNames = ["ammo.wasm.wasm", "ammo.wasm"];
     let wasmFileName = null;
     for (const name of possibleNames) {
       try {
-        const resp = await fetch(`/ammo/${name}`, { method: "HEAD" });
+        const resp = await fetch(`${basePath}ammo/${name}`, { method: "HEAD" });
         if (resp.status === 200) {
           wasmFileName = name;
           break;
@@ -840,14 +888,14 @@ async function loadAmmo() {
     window.Module = window.Module || {};
     window.Module.locateFile = (file) => {
       if (file.endsWith(".wasm")) {
-        return `/ammo/${wasmFileName}`;
+        return `${basePath}ammo/${wasmFileName}`;
       }
-      return `/ammo/${file}`;
+      return `${basePath}ammo/${file}`;
     };
 
     // 动态创建 script 标签加载胶水代码
     const script = document.createElement("script");
-    script.src = "/ammo/ammo.wasm.js";
+    script.src = `${basePath}ammo/ammo.wasm.js`;
     script.type = "text/javascript";
     script.async = true;
 
