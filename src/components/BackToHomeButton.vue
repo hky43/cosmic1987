@@ -22,6 +22,9 @@ const handleClick = () => {
   // 【修复】清除首页跳过加载标记，确保返回首页时显示加载动画
   sessionStorage.removeItem("navigatedToHome");
 
+  // 【修复】标记当前页面需要在下次进入时重置状态
+  sessionStorage.setItem("resetOnReturn", route.path);
+
   // 先恢复主题音乐模式（如果有的话）
   audioManager.restoreHomeMusic();
 

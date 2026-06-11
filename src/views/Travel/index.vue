@@ -42,6 +42,8 @@ import BackToHomeButton from "../../components/BackToHomeButton.vue";
 import { audioManager } from "../../utils/audioManager";
 import { asset } from "../../utils/asset";
 
+defineOptions({ name: "TravelPage" });
+
 const router = useRouter();
 const setPageReady = inject("setPageReady", () => {});
 

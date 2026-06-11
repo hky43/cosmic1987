@@ -128,6 +128,8 @@ class AudioManager {
    * @param {Object} options - 配置选项
    */
   ensureGroup(tag, options = {}) {
+    this.log(`[AudioManager] 页面声明 ensureGroup(${tag})，当前 currentGroup: ${this.currentGroup.value}`);
+    
     if (!tag || !this.trackGroups[tag]) {
       this.warn('[AudioManager] ensureGroup 收到无效标签:', tag, '，回退到 home');
       tag = 'home';
@@ -418,7 +420,7 @@ class AudioManager {
 
       // 恢复音乐标签（当前播放的是哪个页面组的音乐）
       const savedTag = localStorage.getItem('audioCurrentTag');
-      if (savedTag) {
+      if (savedTag && this.currentGroup.value === 'home') {
         this.currentGroup.value = savedTag;
         this.log('从 localStorage 恢复音乐标签:', savedTag);
       }

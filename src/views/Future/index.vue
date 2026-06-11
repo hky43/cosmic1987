@@ -82,6 +82,7 @@ import {
   onBeforeUnmount,
   inject,
 } from "vue";
+import { useRoute } from "vue-router";
 import PagePreloader from "../../components/PagePreloader.vue";
 import * as THREE from "three";
 import BackToHomeButton from "../../components/BackToHomeButton.vue";
@@ -91,6 +92,7 @@ import { asset } from "../../utils/asset";
 
 defineOptions({ name: "FuturePage" });
 
+const route = useRoute();
 const canvasContainer = ref(null);
 const setPageReady = inject("setPageReady", () => {});
 const canInteract = ref(false);
@@ -970,6 +972,28 @@ onDeactivated(() => {
 
 onActivated(() => {
   console.log("[Future] 组件被激活（返回），恢复渲染");
+
+  // 【修复】从首页返回时重置状态，回到开始画面
+  const resetFlag = sessionStorage.getItem("resetOnReturn");
+  if (resetFlag === "/future-4") {
+    sessionStorage.removeItem("resetOnReturn");
+    console.log("[Future] 检测到重置标记，重置到开始画面");
+    gameStarted.value = false;
+    canInteract.value = false;
+    showTitle.value = false;
+    showScrollContent.value = false;
+    player = { x: 0, y: 1.6, z: 8, yaw: 0, pitch: 0 };
+    keys.w = false;
+    keys.s = false;
+    isCutscene = true;
+    cutsceneStartTime = performance.now();
+    isPointerLocked = false;
+    removeOutline();
+  }
+
+  // 【修复】keep-alive 返回时切回本页音乐组
+  audioManager.switchToPath(route.path);
+
   isPageActive = true;
   if (!rafId) {
     rafId = requestAnimationFrame(animate);

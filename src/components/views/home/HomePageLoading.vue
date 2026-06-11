@@ -66,6 +66,40 @@ const percentDisplay = computed(() => {
   return String(Math.floor(progress.value)).padStart(2, "0") + "%";
 });
 
+/* ---------- COS 图片预加载（高级优先级） ---------- */
+const cosImagesLoaded = ref(false);
+const COS_IMAGE_KEYS = [
+  "images/decorations/剪影1.png",
+  "images/decorations/金唱片.png",
+];
+
+function preloadCosImages() {
+  const urls = COS_IMAGE_KEYS.map((key) => asset(key));
+  let loaded = 0;
+
+  urls.forEach((url) => {
+    // 策略1：注入 <link rel="preload"> 让浏览器以最高优先级下载
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = url;
+    document.head.appendChild(link);
+
+    // 策略2：new Image() 真正触发下载并监听完成事件
+    const img = new Image();
+    const onDone = () => {
+      loaded++;
+      if (loaded >= urls.length) {
+        cosImagesLoaded.value = true;
+        console.log("[HomePageLoading] COS 图片全部加载完成");
+      }
+    };
+    img.onload = onDone;
+    img.onerror = onDone;
+    img.src = url;
+  });
+}
+
 /* ---------- 动态 mask-image ---------- */
 const silhouetteStyle = computed(() => {
   const p = progress.value;
@@ -96,6 +130,21 @@ const startLoading = () => {
     return;
   }
 
+  // 先预加载 COS 图片（高优先级），图片就绪后才启动进度动画
+  preloadCosImages();
+  waitForImagesThenAnimate();
+};
+
+function waitForImagesThenAnimate() {
+  if (cosImagesLoaded.value) {
+    console.log("[HomePageLoading] 图片已就绪，启动加载动画");
+    runProgressAnimation();
+  } else {
+    cleanupRaf = requestAnimationFrame(waitForImagesThenAnimate);
+  }
+}
+
+function runProgressAnimation() {
   const duration = 5000;
   const startTime = performance.now();
 
@@ -133,7 +182,7 @@ const startLoading = () => {
   };
 
   cleanupRaf = requestAnimationFrame(tick);
-};
+}
 
 onMounted(() => {
   startLoading();

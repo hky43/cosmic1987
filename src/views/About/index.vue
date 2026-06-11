@@ -349,6 +349,7 @@ let physicsAccumulator = 0;
 let controls = null;
 
 const _color = new THREE.Color();
+const _colorBlack = new THREE.Color(0, 0, 0);
 const _vec2 = new THREE.Vector2();
 const _target = new THREE.Vector3();
 const _tempVec = new THREE.Vector3();
@@ -363,10 +364,16 @@ let targetRot = { x: 0, y: 0, z: 0 };
 let currentRot = { x: 0, y: 0, z: 0 };
 
 let transitionTime = 0;
+let transitionTimeouts = [];
 const TRANSITION_DURATION = 2800;
 // ===== 过渡动画时间参数（单位毫秒）=====
 const BLACK_FADE_MS = 500; // 黑屏淡入/淡出速度
 const TEXT_HOLD_MS = 2000; // BREAK_LIMIT 文字停留时长
+
+function clearTransitionTimeouts() {
+  transitionTimeouts.forEach((id) => clearTimeout(id));
+  transitionTimeouts = [];
+}
 
 let dragStartY = 0;
 let dragOffsetY = 0;
@@ -765,25 +772,29 @@ function beginTransition() {
   // 阶段1：CSS 黑屏遮罩淡入
   showFadeOverlay.value = true;
 
-  setTimeout(() => {
+  clearTransitionTimeouts();
+  const t1 = setTimeout(() => {
     if (phase.value !== "transition") return;
     // 阶段2：BREAK_LIMIT 文字浮现 + 航天器在黑屏背后放大
     showTransitionText.value = true;
     if (spacecraft) spacecraft.visible = true;
 
-    setTimeout(() => {
+    const t2 = setTimeout(() => {
       if (phase.value !== "transition") return;
       // 阶段3：黑屏淡出，文字隐藏
       showFadeOverlay.value = false;
       showTransitionText.value = false;
 
-      setTimeout(() => {
+      const t3 = setTimeout(() => {
         if (phase.value !== "transition") return;
         // 阶段4：完全露出 → 进入展示模式
         enterShowcase();
       }, BLACK_FADE_MS);
+      transitionTimeouts.push(t3);
     }, TEXT_HOLD_MS);
+    transitionTimeouts.push(t2);
   }, BLACK_FADE_MS);
+  transitionTimeouts.push(t1);
 }
 
 // 快速过渡函数 - 用于ESC跳过发射阶段时的平滑过渡
@@ -820,22 +831,26 @@ function startQuickTransition() {
 
   showFadeOverlay.value = true;
 
-  setTimeout(() => {
+  clearTransitionTimeouts();
+  const t1 = setTimeout(() => {
     if (phase.value !== "transition") return;
     showTransitionText.value = true;
     if (spacecraft) spacecraft.visible = true;
 
-    setTimeout(() => {
+    const t2 = setTimeout(() => {
       if (phase.value !== "transition") return;
       showFadeOverlay.value = false;
       showTransitionText.value = false;
 
-      setTimeout(() => {
+      const t3 = setTimeout(() => {
         if (phase.value !== "transition") return;
         enterShowcase();
       }, BLACK_FADE_MS);
+      transitionTimeouts.push(t3);
     }, TEXT_HOLD_MS);
+    transitionTimeouts.push(t2);
   }, BLACK_FADE_MS);
+  transitionTimeouts.push(t1);
 }
 
 function enterShowcase() {
@@ -1446,22 +1461,26 @@ function enterShowcaseDirectly() {
   // 与 beginTransition 使用同一套 setTimeout 过渡链
   showFadeOverlay.value = true;
 
-  setTimeout(() => {
+  clearTransitionTimeouts();
+  const t1 = setTimeout(() => {
     if (phase.value !== "transition") return;
     showTransitionText.value = true;
     if (spacecraft) spacecraft.visible = true;
 
-    setTimeout(() => {
+    const t2 = setTimeout(() => {
       if (phase.value !== "transition") return;
       showFadeOverlay.value = false;
       showTransitionText.value = false;
 
-      setTimeout(() => {
+      const t3 = setTimeout(() => {
         if (phase.value !== "transition") return;
         enterShowcase();
       }, BLACK_FADE_MS);
+      transitionTimeouts.push(t3);
     }, TEXT_HOLD_MS);
+    transitionTimeouts.push(t2);
   }, BLACK_FADE_MS);
+  transitionTimeouts.push(t1);
 }
 
 // 返回首页
@@ -1473,6 +1492,8 @@ function goToHomeWithLoading() {
     if (!localStorage.getItem("homeScrollPosition")) {
       localStorage.setItem("homeScrollPosition", String(window.scrollY));
     }
+    // 【修复】标记当前页面需要在下次进入时重置状态
+    sessionStorage.setItem("resetOnReturn", "/about-2-main");
     router.push("/");
   }, 500);
 }
@@ -1625,6 +1646,19 @@ onDeactivated(() => {
 
 onActivated(() => {
   console.log("[About] 组件被激活（返回），恢复渲染与定时器");
+
+  // 【修复】从首页返回时重置状态，回到立方体发射阶段
+  const resetFlag = sessionStorage.getItem("resetOnReturn");
+  if (resetFlag && resetFlag.startsWith("/about")) {
+    sessionStorage.removeItem("resetOnReturn");
+    console.log("[About] 检测到重置标记，重置到发射阶段");
+    shouldSkipAiming = false;
+    resetShot();
+  }
+
+  // 【修复】keep-alive 返回时切回本页音乐组
+  audioManager.switchToPath(route.path);
+
   isPageActive = true;
   if (!rafId) {
     rafId = requestAnimationFrame(animate);
@@ -1644,6 +1678,7 @@ onActivated(() => {
 onUnmounted(() => {
   cancelAnimationFrame(rafId);
   clearTimeout(resizeTimeout);
+  clearTransitionTimeouts();
   if (timeInterval) clearInterval(timeInterval);
   if (distInterval) clearInterval(distInterval);
   const canvas = canvasRef.value;

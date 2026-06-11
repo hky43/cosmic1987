@@ -16,7 +16,7 @@
       :class="{
         'is-wide': isWide,
         'menu-open': showMenu,
-        'nav-disabled': showProgressPage,
+        'nav-disabled': showProgressPage || showInfoPage,
       }"
     >
       <!-- 时钟按钮：固定最左 -->
@@ -43,6 +43,31 @@
           <circle cx="16" cy="16" r="7" stroke-width="0.5" opacity="0.4" />
           <circle cx="16" cy="16" r="4.5" stroke-width="0.8" />
           <circle cx="16" cy="16" r="1.5" fill="currentColor" stroke="none" />
+        </svg>
+      </button>
+
+      <!-- Info 按钮：与时钟按钮同风格，切换到 InfoPage -->
+      <button
+        class="nav-btn-info"
+        :class="{
+          'is-detached': isDetached,
+          'is-active': showInfoPage,
+        }"
+        @click="handleInfoClick"
+        :title="showInfoPage ? '关闭信息' : '查看信息'"
+      >
+        <svg
+          class="icon-info"
+          viewBox="0 0 32 32"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="16" cy="16" r="14" />
+          <path d="M16 14v8" stroke-width="2" />
+          <circle cx="16" cy="9" r="1.5" fill="currentColor" stroke="none" />
         </svg>
       </button>
 
@@ -87,9 +112,10 @@ const props = defineProps({
   },
   currentY: { type: Number, default: 0 },
   showProgressPage: { type: Boolean, default: false },
+  showInfoPage: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(["navigate", "progress-click"]);
+const emit = defineEmits(["navigate", "progress-click", "info-click"]);
 
 const isWide = ref(true);
 const showMenu = ref(false);
@@ -132,8 +158,12 @@ const handleBtnClick = () => {
   emit("progress-click");
 };
 
+const handleInfoClick = () => {
+  emit("info-click");
+};
+
 const handleNavigate = (index) => {
-  if (props.showProgressPage) return;
+  if (props.showProgressPage || props.showInfoPage) return;
   emit("navigate", index);
 };
 
@@ -436,6 +466,49 @@ onUnmounted(() => {
     display: none;
   }
 
+  /* Info 按钮：与时钟按钮同风格，无旋转 */
+  .nav-btn-info {
+    order: -1;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    margin-top: 0;
+    margin-bottom: 6px;
+    border: 1px solid #ffffff;
+    border-radius: 50%;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #ffffff;
+    transition: border-width 0.2s ease;
+    padding: 0;
+    position: relative;
+    z-index: 2;
+  }
+
+  .nav-btn-info:hover {
+    border-width: 2px;
+  }
+
+  .nav-btn-info.is-active,
+  .nav-btn-info:active,
+  .nav-btn-info.is-detached {
+    border-width: 2px;
+    background: transparent;
+  }
+
+  .nav-btn-info .icon-info {
+    display: block;
+    width: 16px;
+    height: 16px;
+  }
+
+  .nav-btn-info::before {
+    display: none;
+  }
+
   .nav-current {
     display: none;
   }
@@ -578,6 +651,49 @@ onUnmounted(() => {
   .nav-btn-progress.is-active,
   .nav-btn-progress:active,
   .nav-btn-progress.is-detached {
+    border-width: 2px;
+    background: transparent;
+  }
+
+  /* Info 按钮：窄屏样式 */
+  .nav-btn-info {
+    order: -1;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    margin: 0 8px 0 0;
+    border: 1px solid #ffffff;
+    border-radius: 50%;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #ffffff;
+    transition: border-width 0.2s ease;
+    padding: 0;
+    position: relative;
+    z-index: 2;
+  }
+
+  .nav-btn-info::before {
+    display: none !important;
+    content: none;
+  }
+
+  .nav-btn-info .icon-info {
+    display: block;
+    width: 16px;
+    height: 16px;
+  }
+
+  .nav-btn-info:hover {
+    border-width: 2px;
+  }
+
+  .nav-btn-info.is-active,
+  .nav-btn-info:active,
+  .nav-btn-info.is-detached {
     border-width: 2px;
     background: transparent;
   }

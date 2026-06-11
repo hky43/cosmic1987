@@ -3,6 +3,7 @@
   <div
     class="user-progress-page"
     :class="{ 'slide-in-from-right': showProgressPage }"
+    style="position: relative"
     :style="cssVars"
   >
     <!-- TiltCard 组件 - 3D唱片交互系统 -->

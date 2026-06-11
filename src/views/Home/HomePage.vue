@@ -19,14 +19,16 @@
       :top-section-info="topSectionInfo"
       :current-y="currentY"
       :show-progress-page="showProgressPage"
+      :show-info-page="showInfoPage"
       @navigate="jumpToSection"
       @progress-click="toggleProgress"
+      @info-click="toggleInfo"
     />
 
     <div
       class="main-page"
       ref="mainPageRef"
-      :class="{ 'is-hidden': showProgressPage }"
+      :class="{ 'is-hidden': showProgressPage || showInfoPage }"
     >
       <div
         class="top-visual"
@@ -336,9 +338,15 @@
               <Teleport to="body">
                 <div
                   class="narrative-layer-teleported"
-                  v-if="isPageActive && isZone3Visible && !showProgressPage"
+                  v-if="
+                    isPageActive &&
+                    isZone3Visible &&
+                    !showProgressPage &&
+                    !showInfoPage
+                  "
                   :class="{
-                    'is-hidden': !isZone3FullyVisible || showProgressPage,
+                    'is-hidden':
+                      !isZone3FullyVisible || showProgressPage || showInfoPage,
                   }"
                 >
                   <!-- idx 0: 标题句 -->
@@ -551,6 +559,14 @@
     <UserProgressPage
       :class="{ 'is-hidden': !showProgressPage }"
       :show-progress-page="showProgressPage"
+      :style="{ zIndex: activePage === 'progress' ? 101 : 99 }"
+    />
+
+    <!-- 信息页 -->
+    <InfoPage
+      :class="{ 'is-hidden': !showInfoPage }"
+      :show-info-page="showInfoPage"
+      :style="{ zIndex: activePage === 'info' ? 101 : 99 }"
     />
   </div>
 </template>
@@ -572,6 +588,7 @@ import { useRouter } from "vue-router";
 import audioManager from "../../utils/audioManager";
 import { asset } from "../../utils/asset";
 import UserProgressPage from "../UserProgressPage.vue";
+import InfoPage from "../InfoPage.vue";
 import SideNav from "../../components/views/home/SideNavigation.vue";
 import FeatureIndex from "../../components/views/home/LightMonologue.vue";
 import WavyGrid from "../../components/views/home/WavyGrid.vue";
@@ -622,6 +639,8 @@ const zone3VideoRef = ref(null);
 const zone03Ref = ref(null);
 
 const showProgressPage = ref(false);
+const showInfoPage = ref(false);
+const activePage = ref(null); // null / 'progress' / 'info'
 const showHomeLoading = ref(false);
 const isEntering = ref(false);
 const showModal = ref(false);
@@ -734,8 +753,38 @@ const setSectionRef = (el, index) => {
   if (el) sectionRefs.value[index] = el;
 };
 
+let pageSwitchTimer = null;
+
 const toggleProgress = () => {
-  showProgressPage.value = !showProgressPage.value;
+  clearTimeout(pageSwitchTimer);
+  if (showInfoPage.value) {
+    // 从 Info 切换到 Progress：Progress 先切入，Info 在背后等动画结束再消失
+    showProgressPage.value = true;
+    activePage.value = "progress";
+    pageSwitchTimer = setTimeout(() => {
+      showInfoPage.value = false;
+    }, 500);
+  } else {
+    showProgressPage.value = !showProgressPage.value;
+    if (showProgressPage.value) activePage.value = "progress";
+    else activePage.value = null;
+  }
+};
+
+const toggleInfo = () => {
+  clearTimeout(pageSwitchTimer);
+  if (showProgressPage.value) {
+    // 从 Progress 切换到 Info：Info 先切入，Progress 在背后等动画结束再消失
+    showInfoPage.value = true;
+    activePage.value = "info";
+    pageSwitchTimer = setTimeout(() => {
+      showProgressPage.value = false;
+    }, 500);
+  } else {
+    showInfoPage.value = !showInfoPage.value;
+    if (showInfoPage.value) activePage.value = "info";
+    else activePage.value = null;
+  }
 };
 
 // 金唱片开始下落时：仅准备数据，不渲染主页（串行：先唱片 → 后主页动画）
@@ -1497,6 +1546,7 @@ onUnmounted(() => {
   if (zone01HideTimer) clearTimeout(zone01HideTimer);
   // 【新增】清理滚动吸附定时器
   if (scrollEndTimer) clearTimeout(scrollEndTimer);
+  if (pageSwitchTimer) clearTimeout(pageSwitchTimer);
 
   cancelAnimationFrame(rafId);
 
@@ -1565,8 +1615,13 @@ onUnmounted(() => {
   inset: 0;
 }
 
-/* UserProgressPage 显隐控制（使用 opacity/visibility 避免滑入动画失效） */
+/* UserProgressPage / InfoPage 显隐控制（使用 transform 避免滑入动画失效） */
 :deep(.user-progress-page.is-hidden) {
+  transform: translateX(100%);
+  pointer-events: none;
+}
+
+:deep(.info-page.is-hidden) {
   transform: translateX(100%);
   pointer-events: none;
 }

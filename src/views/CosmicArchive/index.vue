@@ -82,6 +82,7 @@ import {
   inject,
   nextTick,
 } from "vue";
+import { useRoute } from "vue-router";
 import PagePreloader from "../../components/PagePreloader.vue";
 import BackToHomeButton from "../../components/BackToHomeButton.vue";
 import { audioManager } from "../../utils/audioManager";
@@ -89,6 +90,7 @@ import { asset } from "../../utils/asset";
 
 defineOptions({ name: "CosmicArchivePage" });
 
+const route = useRoute();
 const setPageReady = inject("setPageReady", () => {});
 
 /* =========================================
@@ -1445,6 +1447,22 @@ onDeactivated(() => {
 
 onActivated(() => {
   console.log("[CosmicArchive] 组件被激活（返回），恢复动画");
+
+  // 【修复】从首页返回时重置状态，回到星图模式
+  const resetFlag = sessionStorage.getItem("resetOnReturn");
+  if (resetFlag === "/cosmic-wave-3") {
+    sessionStorage.removeItem("resetOnReturn");
+    console.log("[CosmicArchive] 检测到重置标记，重置到星图模式");
+    mode.value = "grid";
+    focusPhase.value = "idle";
+    focusProgress.value = 0;
+    focusTarget.value = null;
+    isStandby.value = false;
+  }
+
+  // 【修复】keep-alive 返回时切回本页音乐组
+  audioManager.switchToPath(route.path);
+
   // 【修复】keep-alive 恢复时，canvas 可能因 DOM 变化而状态异常
   // 重新获取尺寸并重绘
   nextTick(() => {

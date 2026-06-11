@@ -53,6 +53,7 @@
         :src="CONFIG.introVideoPath"
         playsinline
         preload="auto"
+        crossorigin="anonymous"
       ></video>
     </div>
 
@@ -283,8 +284,6 @@ import {
   Mesh,
   Texture,
 } from "@babylonjs/core";
-import { AmmoJSPlugin } from "@babylonjs/core/Physics/Plugins/ammoJSPlugin";
-import "@babylonjs/core/Physics/physicsEngineComponent";
 
 import "babylon-mmd/esm/Loader/pmxLoader";
 import { PmxLoader } from "babylon-mmd/esm/Loader/pmxLoader";
@@ -417,7 +416,6 @@ let videoBgMaterial = null;
 // ============================================
 function initEngine() {
   engine = new Engine(mmdCanvas.value, true, {
-    preserveDrawingBuffer: true,
     stencil: true,
     antialias: true,
     adaptToDeviceRatio: true,
@@ -435,10 +433,13 @@ function initEngine() {
 function ensurePmxLoaderRegistered() {
   if (!SceneLoader.IsPluginForExtensionAvailable(".pmx")) {
     const materialBuilder = new MmdStandardMaterialBuilder();
+    // 开启 MMD 风格描边，增强人物轮廓层次感
+    materialBuilder.outlineWidth = 0.5;
+    materialBuilder.outlineColor = new Color3(0, 0, 0);
     const pmxLoader = new PmxLoader();
     pmxLoader.materialBuilder = materialBuilder;
     SceneLoader.RegisterPlugin(pmxLoader);
-    console.log("✅ PMX Loader 注册完成");
+    console.log("✅ PMX Loader 注册完成（已开启描边）");
   }
 }
 
@@ -552,6 +553,7 @@ function setupVideoBackground() {
         autoPlay: false,
         loop: true,
         muted: true,
+        crossOrigin: "anonymous",
       },
     );
 
@@ -749,6 +751,10 @@ function startRenderLoop() {
       if (duration > 0 && currentTime >= duration - 0.1) {
         if (isLooping.value) {
           mmdRuntime.seekAnimation(0);
+          // 动画循环时，视频也跳回开头重播（视频长于动画时也不会继续播放）
+          if (videoBgTexture?.video && videoBgEnabled.value) {
+            videoBgTexture.video.currentTime = 0;
+          }
         } else {
           handleAnimationEnd();
         }
@@ -1048,137 +1054,6 @@ function reload() {
 }
 
 // ============================================
-// 【修复】动态加载 Ammo.js（探测 WASM 文件名 + 缓存实例）
-// ============================================
-async function loadAmmo() {
-  return new Promise(async (resolve, reject) => {
-    if (window.__ammoInstance) {
-      resolve(window.__ammoInstance);
-      return;
-    }
-
-    const basePath = import.meta.env.BASE_URL || "/";
-    console.log(`[Ammo] 基础路径: ${basePath}`);
-
-    if (typeof window.Ammo === "function") {
-      console.log("[Ammo] 检测到预加载的 Ammo，直接初始化...");
-
-      const possibleNames = ["ammo.wasm.wasm", "ammo.wasm"];
-      let wasmFileName = "ammo.wasm.wasm";
-      for (const name of possibleNames) {
-        try {
-          const resp = await fetch(`${basePath}ammo/${name}`, {
-            method: "HEAD",
-          });
-          if (resp.status === 200) {
-            wasmFileName = name;
-            break;
-          }
-        } catch (e) {}
-      }
-
-      window.Module = window.Module || {};
-      window.Module.locateFile = (file) => {
-        if (file.endsWith(".wasm")) {
-          return `${basePath}ammo/${wasmFileName}`;
-        }
-        return `${basePath}ammo/${file}`;
-      };
-
-      try {
-        const instance = await window.Ammo();
-        window.__ammoInstance = instance;
-        console.log("[Ammo] WASM 实例化成功（复用预加载）");
-        resolve(instance);
-      } catch (wasmErr) {
-        reject(new Error(`WASM 实例化失败: ${wasmErr.message}`));
-      }
-      return;
-    }
-
-    const possibleNames = ["ammo.wasm.wasm", "ammo.wasm"];
-    let wasmFileName = null;
-    for (const name of possibleNames) {
-      try {
-        const resp = await fetch(`${basePath}ammo/${name}`, { method: "HEAD" });
-        if (resp.status === 200) {
-          wasmFileName = name;
-          break;
-        }
-      } catch (e) {}
-    }
-
-    if (!wasmFileName) {
-      reject(
-        new Error(
-          "WASM 文件未找到，请确认 public/ammo/ 目录下存在 ammo.wasm 或 ammo.wasm.wasm",
-        ),
-      );
-      return;
-    }
-
-    console.log(`[Ammo] 检测到 WASM 文件: ${wasmFileName}`);
-
-    window.Module = window.Module || {};
-    window.Module.locateFile = (file) => {
-      if (file.endsWith(".wasm")) {
-        return `${basePath}ammo/${wasmFileName}`;
-      }
-      return `${basePath}ammo/${file}`;
-    };
-
-    const script = document.createElement("script");
-    script.src = `${basePath}ammo/ammo.wasm.js`;
-    script.type = "text/javascript";
-    script.async = true;
-
-    script.onload = () => {
-      console.log("[Ammo] JS 胶水代码加载完成，等待 WASM 初始化...");
-
-      let attempts = 0;
-      const maxAttempts = 200;
-
-      const checkInterval = setInterval(() => {
-        attempts++;
-        if (typeof window.Ammo === "function") {
-          clearInterval(checkInterval);
-          window
-            .Ammo()
-            .then((instance) => {
-              window.__ammoInstance = instance;
-              console.log("[Ammo] WASM 实例化成功");
-              resolve(instance);
-            })
-            .catch((wasmErr) => {
-              reject(new Error(`WASM 实例化失败: ${wasmErr.message}`));
-            });
-          return;
-        }
-
-        if (attempts >= maxAttempts) {
-          clearInterval(checkInterval);
-          reject(
-            new Error(
-              "Ammo.js 加载超时（10秒），window.Ammo 未定义，请检查 /ammo/ammo.wasm.js 是否有效",
-            ),
-          );
-        }
-      }, 50);
-    };
-
-    script.onerror = () => {
-      reject(
-        new Error(
-          "Ammo.js 脚本加载失败，请确认 public/ammo/ammo.wasm.js 文件存在且未损坏",
-        ),
-      );
-    };
-
-    document.head.appendChild(script);
-  });
-}
-
-// ============================================
 // 13. 总入口
 // ============================================
 async function initAndLoad() {
@@ -1187,25 +1062,6 @@ async function initAndLoad() {
     phase.value = "loading";
 
     initEngine();
-
-    const SKIP_PHYSICS = true;
-
-    if (!SKIP_PHYSICS) {
-      try {
-        loadDetail.value = "正在加载物理引擎...";
-        const ammoInstance = await loadAmmo();
-        const ammoPlugin = new AmmoJSPlugin(true, ammoInstance);
-        scene.enablePhysics(new Vector3(0, -9.81, 0), ammoPlugin);
-        console.log("✅ Babylon 物理引擎已启用");
-      } catch (err) {
-        console.error("❌ Ammo 物理初始化失败:", err);
-        console.warn(
-          "⚠️ 将以无物理模式继续运行，模型能显示但头发/裙子不会飘动",
-        );
-      }
-    } else {
-      console.log("⚠️ 已跳过物理引擎加载（测试模式）");
-    }
 
     setupLightsWithShadows();
     setupGround();
@@ -1235,6 +1091,11 @@ onActivated(() => {
     engine.resize();
     console.log("[MmdPlayer] 引擎尺寸已修正");
   }
+  // 重新启动渲染循环（onDeactivated 时已停止，避免 GPU 空转）
+  if (engine && !engine.isRendering) {
+    startRenderLoop();
+    console.log("[MmdPlayer] 渲染循环已恢复");
+  }
   if (mmdRuntime && isPlaying.value) {
     mmdRuntime.playAnimation();
   }
@@ -1248,6 +1109,11 @@ onActivated(() => {
 
 onDeactivated(() => {
   console.log("[MmdPlayer] 页面停用，暂停资源");
+  // 停止渲染循环，释放 GPU（keep-alive 缓存时不会触发 onBeforeUnmount）
+  if (engine) {
+    engine.stopRenderLoop();
+    console.log("[MmdPlayer] 渲染循环已停止");
+  }
   if (mmdRuntime && isPlaying.value) {
     mmdRuntime.pauseAnimation();
   }

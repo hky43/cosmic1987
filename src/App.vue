@@ -16,7 +16,10 @@
 
   <!-- keep-alive 缓存首页，避免返回时 3D 模型/COS 资源重新加载 -->
   <router-view v-slot="{ Component }">
-    <keep-alive include="HomePage,FuturePage,AboutPage,CosmicArchivePage">
+    <keep-alive
+      include="HomePage,FuturePage,AboutPage,CosmicArchivePage,TravelPage"
+      :exclude="keepAliveExclude"
+    >
       <component :is="Component" />
     </keep-alive>
   </router-view>
@@ -27,6 +30,14 @@ import { ref, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import audioManager from "./utils/audioManager";
 
+// 【修复】在 setup() 中立即初始化音频管理器
+// 必须在任何子组件（页面）onMounted 之前调用 init()，
+// 因为子组件 onMounted 先于父组件 onMounted 触发。
+// 如果 init() 放在 onMounted 中，会导致子组件的 ensureGroup()
+// 在 state 加载完成前就运行，从而用空状态覆盖 localStorage 中
+// 原有的播放状态，导致刷新后无法恢复正确的音乐标签。
+audioManager.init();
+
 const showMainLayout = ref(true);
 const showRouteLoader = ref(false);
 const router = useRouter();
@@ -34,6 +45,19 @@ const route = useRoute();
 let isInitialized = false;
 let routeLoaderTimer = null;
 const MIN_LOADER_DURATION = 700;
+
+// keep-alive 动态排除列表
+// 当用户从 About/CosmicArchive/Future/Travel 按 ESC 返回主页时，
+// 将该页面组件加入排除列表以销毁缓存，确保下次进入状态与首次进入一致
+const keepAliveExclude = ref([]);
+
+// 路由名 -> keep-alive 组件名 映射
+const ROUTE_TO_COMPONENT = {
+  about2Main: "AboutPage",
+  cosmicWave3: "CosmicArchivePage",
+  future4: "FuturePage",
+  travel1: "TravelPage",
+};
 
 const startRouteLoader = () => {
   if (routeLoaderTimer) clearTimeout(routeLoaderTimer);
@@ -203,10 +227,7 @@ onMounted(() => {
     showMainLayout.value = window.__APP_STATE__.showMainLayout.value;
   }
 
-  // 【新增】初始化音频管理器
-  audioManager.init();
-
-  // 【新增】初始化当前路由的音频
+  // 初始化当前路由的音频（init 已在 setup() 中调用，此处只需切换路径）
   audioManager.switchToPath(route.path);
 
   // 路由守卫 - 显示加载动画 + 清理遮罩 + 切换音频
@@ -218,6 +239,22 @@ onMounted(() => {
       next();
       return;
     }
+
+    // 当从 About/CosmicArchive/Future/Travel 按 ESC 返回主页时，
+    // 将该组件加入 keep-alive 排除列表以销毁缓存，确保下次进入状态全新
+    if ((to.path === "/" || to.path === "/home") && from.name) {
+      const componentName = ROUTE_TO_COMPONENT[from.name];
+      if (componentName && !keepAliveExclude.value.includes(componentName)) {
+        console.log("[App] 返回主页，销毁缓存:", componentName);
+        keepAliveExclude.value = [...keepAliveExclude.value, componentName];
+        nextTick(() => {
+          keepAliveExclude.value = keepAliveExclude.value.filter(
+            (n) => n !== componentName,
+          );
+        });
+      }
+    }
+
     // 后续页面切换：显示路由加载动画
     startRouteLoader();
     // 清理遮罩
