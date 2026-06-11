@@ -270,6 +270,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
+import { audioManager } from "../../../utils/audioManager";
 import { asset } from "@/utils/asset";
 
 const router = useRouter();
@@ -285,6 +286,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 };
 
 onMounted(() => {
+  audioManager.ensureGroup("travel");
   window.addEventListener("keydown", handleKeydown);
 });
 

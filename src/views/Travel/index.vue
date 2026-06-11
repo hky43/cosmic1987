@@ -193,6 +193,8 @@ const handleNodeClick = (node) => {
 
 onMounted(async () => {
   try {
+    // 声明当前页面属于 'travel' 音频组
+    audioManager.ensureGroup("travel");
     console.log("[Travel Page] 主题音乐模式，音乐由 audioManager 管理");
 
     /* ========== 强制重置 body（防止 HomePage 残留） ========== */
@@ -200,27 +202,17 @@ onMounted(async () => {
     document.body.style.overflow = "auto";
     document.documentElement.style.height = "100%";
 
-    /* ========== 暴力清理残留遮罩 ========== */
+    /* ========== 清理 App 路由加载残留（仅清理已知 CSS class，不暴力扫描 body） ========== */
     const killOverlays = () => {
       document
         .querySelectorAll(
           ".global-white-mask, .transition-mask, .page-loader, .white-fade-enter-active, .white-fade-leave-active, .white-fade-enter-from, .white-fade-leave-to",
         )
-        .forEach((el) => el.remove());
-
-      document.querySelectorAll("body > div").forEach((el) => {
-        const style = getComputedStyle(el);
-        const rect = el.getBoundingClientRect();
-        const isFixed =
-          style.position === "fixed" || style.position === "absolute";
-        const isFullScreen =
-          rect.width >= window.innerWidth * 0.8 &&
-          rect.height >= window.innerHeight * 0.8;
-        if (isFixed && isFullScreen) {
-          console.warn("[Travel] 移除全屏遮罩:", el.className || "anonymous");
-          el.remove();
-        }
-      });
+        .forEach((el) => {
+          el.style.display = "none";
+          el.style.opacity = "0";
+          el.style.pointerEvents = "none";
+        });
 
       document.body.style.background = "";
       document.body.style.overflow = "";
@@ -228,8 +220,10 @@ onMounted(async () => {
       document.documentElement.style.overflow = "";
     };
 
+    // 仅在挂载时清理一次（HomePage Teleport 元素已由 isPageActive 守卫自动隐藏）
+    // 移除 body > div 暴力扫描（getComputedStyle + getBoundingClientRect 导致强制同步重排，引发滚动卡顿）
     killOverlays();
-    [50, 100, 300, 500, 1000, 3000].forEach((d) => setTimeout(killOverlays, d));
+    setTimeout(killOverlays, 100);
 
     // 图片已由 PagePreloader 预加载到缓存，直接读取尺寸
     const measureImage = (src) =>

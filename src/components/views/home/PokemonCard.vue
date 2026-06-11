@@ -33,11 +33,99 @@
     </div>
 
     <div class="arrow arrow-right" @click="nextCard" @mousedown.stop>›</div>
+
+    <button
+      class="fullscreen-trigger"
+      @click.stop="openFullscreen"
+      title="全屏查看"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path
+          d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"
+        />
+      </svg>
+    </button>
   </div>
+
+  <Teleport to="body">
+    <Transition name="card-fullscreen">
+      <div
+        v-if="isFullscreen"
+        class="fullscreen-overlay"
+        @click="closeFullscreen"
+        :style="{
+          '--noise-size': fullscreenNoiseSize + 'px',
+          '--border-radius': fullscreenBorderRadius + 'px',
+        }"
+      >
+        <button class="fullscreen-close" @click="closeFullscreen">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+
+        <div
+          class="fullscreen-slider"
+          @click.stop
+          @mousedown="onDragStart"
+          @mousemove="onFullscreenMouseMove"
+          @mouseup="onDragEnd"
+          @mouseleave="onDragEnd"
+          @touchstart.prevent="onDragStart"
+          @touchmove.prevent="onFullscreenMouseMove"
+          @touchend="onDragEnd"
+        >
+          <div class="arrow arrow-left" @click="prevCard" @mousedown.stop>
+            ‹
+          </div>
+
+          <div
+            v-for="(card, index) in cards"
+            :key="card.id"
+            class="card-wrap"
+            :style="fullscreenWrapStyle(index)"
+          >
+            <div
+              class="card-inner"
+              :class="cardClass(index)"
+              :ref="(el) => setFullscreenCardRef(el, index)"
+            >
+              <img :src="card.image" class="card-img" draggable="false" />
+              <div class="card__glare"></div>
+              <div class="card-noise" v-if="index === 2"></div>
+            </div>
+          </div>
+
+          <div class="arrow arrow-right" @click="nextCard" @mousedown.stop>
+            ›
+          </div>
+        </div>
+
+        <span class="fullscreen-hint">按 ESC 键关闭</span>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted,
+  inject,
+  watchEffect,
+} from "vue";
 import { asset } from "../../../utils/asset";
 
 /* ---------- 配置 ---------- */
@@ -130,20 +218,52 @@ function animate() {
     targetRotate.value.y,
     0.12,
   );
+  /* 主滑块卡片 */
   const card = cardRefs.value[currentIndex.value];
   if (card && !isDragging.value) {
     card.style.setProperty("--rx", `${currentRotate.value.x.toFixed(2)}deg`);
     card.style.setProperty("--ry", `${currentRotate.value.y.toFixed(2)}deg`);
   }
+  /* 全屏卡片 */
+  if (isFullscreen.value && !isDragging.value) {
+    const fsCard = fullscreenCardRefs.value[currentIndex.value];
+    if (fsCard) {
+      fsCard.style.setProperty(
+        "--rx",
+        `${currentRotate.value.x.toFixed(2)}deg`,
+      );
+      fsCard.style.setProperty(
+        "--ry",
+        `${currentRotate.value.y.toFixed(2)}deg`,
+      );
+    }
+  }
   rafId = requestAnimationFrame(animate);
 }
 
+/* 【新增】HomePage keep-alive 暂停/恢复 */
+const pageActive = inject("isPageActive", ref(true));
+watchEffect(() => {
+  if (!pageActive.value) {
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  } else if (!rafId) {
+    rafId = requestAnimationFrame(animate);
+  }
+});
+
 onMounted(() => {
   rafId = requestAnimationFrame(animate);
+  window.addEventListener("keydown", handleFullscreenKeydown);
 });
 onUnmounted(() => {
   cancelAnimationFrame(rafId);
   clearBufferTimer();
+  window.removeEventListener("keydown", handleFullscreenKeydown);
+  window.removeEventListener("resize", calcFullscreenCardSize);
+  document.body.style.overflow = "";
 });
 
 /* ---------- 卡片类型 class ---------- */
@@ -271,6 +391,146 @@ function nextCard() {
   resetTilt();
 }
 
+/* ============================================================
+   【全屏模式】
+   ============================================================ */
+const isFullscreen = ref(false);
+const fullscreenCardSize = ref({ w: 600, h: 800 });
+const fullscreenCardRefs = ref([]);
+
+function setFullscreenCardRef(el, index) {
+  if (el) fullscreenCardRefs.value[index] = el;
+}
+
+const fullscreenNoiseSize = computed(() => {
+  const baseW = 300;
+  const size = fullscreenCardSize.value.w;
+  return Math.round(150 * (size / baseW));
+});
+
+const fullscreenBorderRadius = computed(() => {
+  const baseW = 300;
+  const size = fullscreenCardSize.value.w;
+  return Math.round(20 * (size / baseW));
+});
+
+function resetFullscreenTilt() {
+  targetRotate.value.x = 0;
+  targetRotate.value.y = 0;
+  const card = fullscreenCardRefs.value[currentIndex.value];
+  if (card) {
+    card.style.setProperty("--x", "50%");
+    card.style.setProperty("--y", "50%");
+  }
+}
+
+function onFullscreenMouseMove(e) {
+  if (isDragging.value) {
+    onDragMove(e);
+    return;
+  }
+  const card = fullscreenCardRefs.value[currentIndex.value];
+  if (!card) return;
+
+  const rect = card.getBoundingClientRect();
+  const mx = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
+  const my = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
+
+  const inCard =
+    mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom;
+
+  if (inCard) {
+    clearBufferTimer();
+    trackingState = "active";
+
+    const x = (mx - rect.left) / rect.width;
+    const y = (my - rect.top) / rect.height;
+    card.style.setProperty("--x", `${x * 100}%`);
+    card.style.setProperty("--y", `${y * 100}%`);
+    targetRotate.value.x = (0.5 - y) * 30;
+    targetRotate.value.y = (x - 0.5) * 30;
+
+    const idx = currentIndex.value;
+    if (idx === 1 || idx === 2) {
+      card.style.setProperty("--mx", x.toFixed(3));
+      card.style.setProperty("--my", y.toFixed(3));
+    }
+  } else if (trackingState === "active") {
+    trackingState = "buffer";
+    bufferTimer = setTimeout(() => {
+      trackingState = "stopped";
+      resetFullscreenTilt();
+    }, 1500);
+  }
+}
+
+const calcFullscreenCardSize = () => {
+  const sizes = cardSizes.value;
+  if (!sizes.length) {
+    fullscreenCardSize.value = { w: 600, h: 800 };
+    return;
+  }
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const refSize = sizes[currentIndex.value] || sizes[0];
+  const ratio = refSize.w / refSize.h;
+  const hPad = 80;
+  const vPad = 170;
+  const maxW = vw - hPad * 2;
+  const maxH = vh - vPad;
+  let w, h;
+  if (maxW / maxH > ratio) {
+    h = maxH;
+    w = h * ratio;
+  } else {
+    w = maxW;
+    h = w / ratio;
+  }
+  fullscreenCardSize.value = { w: Math.round(w), h: Math.round(h) };
+};
+
+const openFullscreen = () => {
+  isFullscreen.value = true;
+  calcFullscreenCardSize();
+  window.addEventListener("resize", calcFullscreenCardSize);
+  document.body.style.overflow = "hidden";
+};
+
+const closeFullscreen = () => {
+  isFullscreen.value = false;
+  window.removeEventListener("resize", calcFullscreenCardSize);
+  document.body.style.overflow = "";
+};
+
+const handleFullscreenKeydown = (e) => {
+  if (e.key === "Escape" && isFullscreen.value) {
+    closeFullscreen();
+  }
+};
+
+function fullscreenWrapStyle(index) {
+  const dist = getDist(index, currentIndex.value);
+  const isActive = index === currentIndex.value;
+  const isNeighbor = Math.abs(dist) === 1;
+  const size = fullscreenCardSize.value;
+  const vw = window.innerWidth;
+  const offset = Math.round(vw / 2 + size.w / 2 + GAP);
+  let x = 0;
+  if (dist < 0) x -= offset;
+  if (dist > 0) x += offset;
+  if (!isActive && !isNeighbor) x += dist > 0 ? offset * 2 : -offset * 2;
+  return {
+    width: `${size.w}px`,
+    height: `${size.h}px`,
+    transform: `translate(calc(-50% + ${x}px), -50%)`,
+    opacity: isActive ? 1 : 0,
+    zIndex: isActive ? 10 : isNeighbor ? 5 : 0,
+    pointerEvents: isActive ? "auto" : "none",
+    transition:
+      "transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.35s ease",
+  };
+}
+
 /* ---------- 卡片位移 ---------- */
 function wrapStyle(index) {
   const dist = getDist(index, currentIndex.value);
@@ -363,7 +623,7 @@ function setCardRef(el, index) {
   width: 100%;
   height: 100%;
   position: relative;
-  border-radius: 20px;
+  border-radius: var(--border-radius, 20px);
   overflow: hidden;
   transform-style: preserve-3d;
   will-change: transform;
@@ -523,7 +783,7 @@ function setCardRef(el, index) {
   opacity: 0.08; /* 【减淡】原 0.12 → 0.08 */
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-  background-size: 150px 150px;
+  background-size: var(--noise-size, 150px) var(--noise-size, 150px);
 }
 
 .card-v .card__glare {
@@ -538,5 +798,132 @@ function setCardRef(el, index) {
     /* 【减淡】原 0.15 → 0.08 */ transparent 55%
   );
   mix-blend-mode: soft-light;
+}
+
+/* ============================================================
+   【全屏模式】覆盖层
+   ============================================================ */
+.fullscreen-trigger {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+  transition: all 0.25s ease;
+}
+.fullscreen-trigger:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.9);
+}
+.fullscreen-trigger svg {
+  width: 18px;
+  height: 18px;
+}
+
+.fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.95);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+/* 强制 2D 裁剪，防止 3D 旋转时 ::before/::after 溢出卡片 */
+.fullscreen-overlay .card-inner {
+  clip-path: inset(0 round var(--border-radius, 20px));
+  background: #1a1a2e;
+}
+
+.fullscreen-slider {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  user-select: none;
+}
+
+.fullscreen-close {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
+  transition: all 0.25s ease;
+}
+.fullscreen-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
+.fullscreen-close svg {
+  width: 22px;
+  height: 22px;
+}
+
+.fullscreen-hint {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.35);
+  z-index: 10001;
+  letter-spacing: 0.05em;
+}
+
+/* 全屏过渡动画 */
+.card-fullscreen-enter-active,
+.card-fullscreen-leave-active {
+  transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.card-fullscreen-enter-from {
+  opacity: 0;
+}
+.card-fullscreen-enter-from .fullscreen-slider {
+  transform: scale(0.85);
+}
+.card-fullscreen-enter-from .fullscreen-close {
+  opacity: 0;
+  transform: scale(0.5) rotate(-180deg);
+}
+.card-fullscreen-enter-from .fullscreen-hint {
+  opacity: 0;
+}
+.card-fullscreen-leave-to {
+  opacity: 0;
+}
+.card-fullscreen-leave-to .fullscreen-slider {
+  transform: scale(1.05);
+}
+.card-fullscreen-leave-to .fullscreen-close {
+  opacity: 0;
+}
+.card-fullscreen-leave-to .fullscreen-hint {
+  opacity: 0;
 }
 </style>

@@ -336,7 +336,10 @@
               <Teleport to="body">
                 <div
                   class="narrative-layer-teleported"
-                  :class="{ 'is-hidden': !isZone3FullyVisible }"
+                  v-if="isPageActive && isZone3Visible && !showProgressPage"
+                  :class="{
+                    'is-hidden': !isZone3FullyVisible || showProgressPage,
+                  }"
                 >
                   <!-- idx 0: 标题句 -->
                   <div
@@ -418,17 +421,6 @@
           data-index="3"
           :ref="(el) => setSectionRef(el, 4)"
         >
-          <button class="fullscreen-btn" @click="openPokemonCardFullscreen">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M7 15l5-5 5 5M7 9l5 5 5-5" />
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-            </svg>
-          </button>
           <div class="recruit-header">
             <h2 class="recruit-title">
               卡牌收藏<br />
@@ -540,39 +532,16 @@
 
     <!-- 弹窗 -->
     <Teleport to="body">
-      <div v-if="showModal" class="modal-overlay" @click="closeModal">
+      <div
+        v-if="isPageActive && showModal"
+        class="modal-overlay"
+        @click="closeModal"
+      >
         <div class="modal-wide-bar" @click.stop>
           <p>{{ modalMessage }}</p>
           <span class="close-hint">点击空白处关闭</span>
         </div>
       </div>
-
-      <!-- 卡牌全屏弹窗 -->
-      <Transition name="fullscreen">
-        <div
-          v-if="showPokemonFullscreen"
-          class="pokemon-fullscreen-overlay"
-          @click="closePokemonCardFullscreen"
-        >
-          <button
-            class="fullscreen-close-btn"
-            @click="closePokemonCardFullscreen"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-          <div class="pokemon-fullscreen-content" @click.stop>
-            <PokemonCard />
-          </div>
-          <span class="fullscreen-hint">按 ESC 键关闭</span>
-        </div>
-      </Transition>
     </Teleport>
 
     <!-- 可拖动的悬浮正方形（吊饰效果） -->
@@ -597,6 +566,7 @@ import {
   watch,
   nextTick,
   onErrorCaptured,
+  provide,
 } from "vue";
 import { useRouter } from "vue-router";
 import audioManager from "../../utils/audioManager";
@@ -616,6 +586,15 @@ import "./HomePage.css";
 defineOptions({ name: "HomePage" });
 
 const router = useRouter();
+
+// 【新增】provide 给所有子组件：HomePage 是否处于活跃状态（keep-alive 激活中）
+// 子组件通过 inject 获取，在 onDeactivated 时暂停自己的 RAF / 动画循环
+const isPageActive = ref(true);
+provide("isPageActive", isPageActive);
+
+// 【关键】区分「初始挂载」和「keep-alive 恢复」：onActivated 在两者都会触发
+// 只有从子页面返回时（hasBeenMounted=true）才跳 Zone 3
+let hasBeenMounted = false;
 
 /* ════════════════════════════════════════════════════════════
    第 1 层：所有 ref / reactive / let 声明
@@ -648,7 +627,6 @@ const isEntering = ref(false);
 const showModal = ref(false);
 const modalMessage = ref("提示信息");
 const topSectionInfo = ref({ top: 0, height: 0 });
-const showPokemonFullscreen = ref(false);
 
 // 悬浮正方形相关变量（吊饰效果）
 const showFloatingSquare = ref(false);
@@ -760,16 +738,20 @@ const toggleProgress = () => {
   showProgressPage.value = !showProgressPage.value;
 };
 
-// 【新增】加载画面开始淡出时提前准备：在背后渲染主页并触发淡入
+// 金唱片开始下落时：仅准备数据，不渲染主页（串行：先唱片 → 后主页动画）
 const onHomeLoadingPrepare = () => {
-  console.log("[HomePage] 加载画面开始淡出，提前渲染主页");
-  // 同一帧内：标记动画 + 显示主页，确保 cosmic-container 初次渲染即带 is-entering
-  isEntering.value = true;
-  showHomeLoading.value = false;
+  console.log("[HomePage] 金唱片下落中，准备主页数据");
+  // 不设置 isEntering（主页不渲染），不设置 showHomeLoading = false（保留加载画面）
   showZone01.value = true;
   modelDropping.value = true;
-  // 标记已访问过首页
   localStorage.setItem("hasPlayedIntroAnimation", "true");
+};
+
+// 金唱片掉出屏幕后：硬切 + 触发主页入场动画
+const onHomeLoadingComplete = () => {
+  console.log("[HomePage] 金唱片已出屏，显示主页");
+  showHomeLoading.value = false; // 隐藏加载画面
+  isEntering.value = true; // 渲染主页 + 播放 cosmicFadeIn 动画
 
   nextTick(() => {
     updateTopSectionInfo();
@@ -780,33 +762,12 @@ const onHomeLoadingPrepare = () => {
       rafId = requestAnimationFrame(smoothScroll);
     }
     observeAnimations();
-    console.log("[HomePage] 主页提前渲染完成，正在交叉淡入");
+    console.log("[HomePage] 主页渲染完成");
   });
-};
-
-// 首页加载动画淡出完成回调（此时主页已完全可见）
-const onHomeLoadingComplete = () => {
-  console.log("[HomePage] 加载画面淡出完成，主页已完全接管");
 };
 
 const closeModal = () => {
   showModal.value = false;
-};
-
-const openPokemonCardFullscreen = () => {
-  showPokemonFullscreen.value = true;
-  document.body.style.overflow = "hidden";
-};
-
-const closePokemonCardFullscreen = () => {
-  showPokemonFullscreen.value = false;
-  document.body.style.overflow = "";
-};
-
-const handleKeydown = (e) => {
-  if (e.key === "Escape" && showPokemonFullscreen.value) {
-    closePokemonCardFullscreen();
-  }
 };
 
 // 掉落悬浮正方形（吊饰效果）
@@ -851,6 +812,7 @@ const checkZone3FullyVisible = () => {
 };
 
 const resizeBody = () => {
+  if (!isPageActive.value) return;
   if (scrollContentRef.value) {
     const h = scrollContentRef.value.offsetHeight;
     document.body.style.height = `${h}px`;
@@ -1329,19 +1291,33 @@ onErrorCaptured((err, instance, info) => {
 });
 
 onMounted(() => {
-  // 【新增】路由离开守卫：记录离开首页时的滚动位置
+  // 声明当前页面属于 'home' 音频组
+  audioManager.ensureGroup("home");
+
+  // 首次进入首页：无缓存状态时，延迟尝试播放第一首音乐（仅限当前页面）
+  if (
+    !audioManager.playbackStates.home &&
+    audioManager.sound &&
+    !audioManager.isPlaying
+  ) {
+    setTimeout(() => {
+      audioManager.play().catch(() => {
+        console.log("[HomePage] Chrome 阻止自动播放，等待用户首次交互");
+        audioManager._setupAutoPlayOnFirstInteraction();
+      });
+    }, 600);
+  }
+
+  // 记录跳转到其他页面前的标记（供 App.vue WARP DRIVE 和 HomePageLoading 逻辑使用）
   removeGuard = router.beforeEach((to, from) => {
     if (from.path === "/" && to.path !== "/") {
-      console.log("[HomePage] 离开首页，记录滚动位置:", window.scrollY);
-      localStorage.setItem("homeScrollPosition", window.scrollY.toString());
-      // 标记已导航到首页，下次返回时跳过加载动画
+      console.log("[HomePage] 离开首页，导航至:", to.path);
       sessionStorage.setItem("navigatedToHome", "true");
     }
   });
 
   window.addEventListener("resize", updateTopSectionInfo);
   window.addEventListener("scroll", onWindowScroll, { passive: true });
-  window.addEventListener("keydown", handleKeydown);
 
   // 如果显示加载动画，这些初始化放到 onHomeLoadingComplete
   // 因为此时 cosmic-container 还不存在，mainPageRef 为 null
@@ -1452,29 +1428,56 @@ onMounted(() => {
     },
     { immediate: false },
   );
+  hasBeenMounted = true;
 });
 
 // keep-alive: 离开首页时暂停耗性能操作
 onDeactivated(() => {
   console.log("[HomePage] 组件被缓存（离开首页），暂停动画/事件");
+  // 【新增】通知所有子组件暂停操作
+  isPageActive.value = false;
   // 暂停滚动平滑动画
   if (rafId) {
     cancelAnimationFrame(rafId);
     rafId = null;
   }
-  // 移除键盘监听，避免与其他页面冲突
-  window.removeEventListener("keydown", handleKeydown);
+  // 移除滚轮监听，避免离开首页后仍拦截滚轮事件
+  if (mainPageRef.value) {
+    mainPageRef.value.removeEventListener("wheel", handleWheel);
+  }
+  // 【修复】确保所有 Teleport 到 body 的元素在离开首页时不残留
+  showFloatingSquare.value = false;
+  showModal.value = false;
 });
 
 // keep-alive: 回到首页时恢复操作
 onActivated(() => {
   console.log("[HomePage] 组件被激活（回到首页），恢复动画/事件");
+  // 【新增】通知所有子组件恢复操作
+  isPageActive.value = true;
+  // 【修复】恢复 body 高度，确保其他页面不会导致 body 高度错误
+  nextTick(() => {
+    resizeBody();
+    // 【关键】只有从子页面返回时（hasBeenMounted=true）才跳 Zone 3
+    // 初始加载时 onActivated 也会触发，但此时 hasBeenMounted=false，跳过
+    if (hasBeenMounted) {
+      zone2ManualUnlock.value = true;
+      isFeatureLocked.value = false;
+      zone2Progress.value = 1;
+      showZone01.value = false;
+      jumpToSection(2);
+    }
+  });
+  // 【修复】恢复滚轮监听器
+  if (mainPageRef.value) {
+    mainPageRef.value.addEventListener("wheel", handleWheel, {
+      passive: false,
+    });
+  }
   // 恢复滚动平滑动画
   if (!rafId && mainPageRef.value) {
     rafId = requestAnimationFrame(smoothScroll);
   }
-  // 恢复键盘监听
-  window.addEventListener("keydown", handleKeydown);
 });
 
 onUnmounted(() => {
@@ -1486,7 +1489,6 @@ onUnmounted(() => {
 
   window.removeEventListener("scroll", onWindowScroll);
   window.removeEventListener("resize", updateTopSectionInfo);
-  window.removeEventListener("keydown", handleKeydown);
 
   if (mainPageRef.value) {
     mainPageRef.value.removeEventListener("wheel", handleWheel);
@@ -1754,8 +1756,8 @@ onUnmounted(() => {
 
 /* 模型容器：只负责尺寸，不额外做动画（动画由父级 .model-stage 统一驱动） */
 .model-placeholder {
-  width: 40%;
-  height: 40%;
+  width: 50%;
+  height: 50%;
   background: transparent;
   display: flex;
   align-items: center;
@@ -3147,150 +3149,6 @@ onUnmounted(() => {
   to {
     background: rgba(0, 0, 0, 0.7);
   }
-}
-
-/* 全屏按钮 */
-.fullscreen-btn {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  width: 48px;
-  height: 48px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.3);
-  color: #fff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-  z-index: 50;
-}
-
-.fullscreen-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.5);
-  transform: scale(1.05);
-}
-
-.fullscreen-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
-/* 卡牌全屏弹窗 */
-.pokemon-fullscreen-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.95);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-}
-
-.pokemon-fullscreen-content {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 60px;
-}
-
-.pokemon-fullscreen-content :deep(.slider) {
-  width: 100%;
-  max-width: 1200px;
-  transform: scale(1.2);
-}
-
-/* 全屏过渡动画 */
-.fullscreen-enter-active,
-.fullscreen-leave-active {
-  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.fullscreen-enter-from {
-  opacity: 0;
-  transform: scale(0.9);
-}
-
-.fullscreen-enter-from .pokemon-fullscreen-content {
-  transform: scale(0.8);
-}
-
-.fullscreen-enter-from .fullscreen-close-btn {
-  opacity: 0;
-  transform: scale(0.5) rotate(-180deg);
-}
-
-.fullscreen-enter-from .fullscreen-hint {
-  opacity: 0;
-  transform: translateX(-50%) translateY(20px);
-}
-
-.fullscreen-leave-to {
-  opacity: 0;
-  transform: scale(1.05);
-}
-
-.fullscreen-leave-to .pokemon-fullscreen-content {
-  transform: scale(1.1);
-}
-
-.fullscreen-leave-to .fullscreen-close-btn {
-  opacity: 0;
-  transform: scale(0.5) rotate(180deg);
-}
-
-.fullscreen-leave-to .fullscreen-hint {
-  opacity: 0;
-  transform: translateX(-50%) translateY(20px);
-}
-
-.fullscreen-close-btn {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  width: 56px;
-  height: 56px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.5);
-  color: #fff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-  z-index: 2001;
-}
-
-.fullscreen-close-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.5);
-  transform: rotate(90deg);
-}
-
-.fullscreen-close-btn svg {
-  width: 24px;
-  height: 24px;
-}
-
-.fullscreen-hint {
-  position: absolute;
-  bottom: 30px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 
 /* 路由过渡 */

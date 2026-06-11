@@ -23,7 +23,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted,
+  inject,
+  watchEffect,
+} from "vue";
 import { asset } from "../../../utils/asset";
 
 /* ======================== 帧配置 ======================== */
@@ -315,6 +322,46 @@ function setupIO() {
   );
   if (containerRef.value) io.observe(containerRef.value);
 }
+
+/* ======================== 【新增】HomePage keep-alive 暂停/恢复 ======================== */
+const pageActive = inject("isPageActive", ref(true));
+
+watchEffect(() => {
+  if (!pageActive.value) {
+    // 暂停渲染
+    if (renderRaf) {
+      cancelAnimationFrame(renderRaf);
+      renderRaf = null;
+    }
+    if (updateProgressTimer) {
+      cancelAnimationFrame(updateProgressTimer);
+      updateProgressTimer = null;
+    }
+    if (io) {
+      io.disconnect();
+      io = null;
+    }
+    window.removeEventListener("scroll", onScroll);
+    window.removeEventListener("resize", onResize);
+    // 【修复】离开首页时立即隐藏 Teleport 到 body 的 canvas（绕过 CSS 0.5s 过渡延迟）
+    isVisible.value = false;
+    if (canvasRef.value) {
+      canvasRef.value.style.display = "none";
+    }
+  } else {
+    // 恢复 canvas 显示
+    if (canvasRef.value) {
+      canvasRef.value.style.display = "";
+    }
+    if (!io) {
+      setupIO();
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize, { passive: true });
+    updateProgress();
+    requestRender(true);
+  }
+});
 
 /* ======================== 生命周期 ======================== */
 onMounted(() => {

@@ -10,9 +10,17 @@
 </template>
 
 <script setup>
+import { onMounted } from "vue";
 import { useRouter } from "vue-router";
+import { audioManager } from "../utils/audioManager";
 
 const router = useRouter();
+
+onMounted(() => {
+  // 404 页面属于 home 组（点击返回首页时会重新触发）
+  // 这里先切回 home 防止播放其他页音乐
+  audioManager.ensureGroup("home");
+});
 
 function goHome() {
   router.push("/");

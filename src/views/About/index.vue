@@ -151,11 +151,11 @@
           </div>
 
           <!-- ============================================ -->
-          <!-- 【修改】Detail 面板 — 新增 ENTER MISSION 按钮  -->
+          <!-- 【修改】Detail 面板 — 08 关卡时隐藏           -->
           <!-- ============================================ -->
           <div
             class="detail-panel"
-            v-show="phase === 'detail'"
+            v-show="phase === 'detail' && currentLevel?.id !== 8"
             :class="{ show: detailShow }"
           >
             <div class="detail-inner" v-if="currentLevel">
@@ -364,6 +364,9 @@ let currentRot = { x: 0, y: 0, z: 0 };
 
 let transitionTime = 0;
 const TRANSITION_DURATION = 2800;
+// ===== 过渡动画时间参数（单位毫秒）=====
+const BLACK_FADE_MS = 500; // 黑屏淡入/淡出速度
+const TEXT_HOLD_MS = 2000; // BREAK_LIMIT 文字停留时长
 
 let dragStartY = 0;
 let dragOffsetY = 0;
@@ -730,53 +733,114 @@ function onPointerUp() {
 function beginTransition() {
   phase.value = "transition";
   transitionTime = 0;
-  phaseSwitchBuffer = 2; // 状态切换缓冲2帧
-  Matter.Body.setVelocity(boxBody, { x: 0, y: 0 });
-  Matter.Body.setAngularVelocity(boxBody, 0);
-  const angle = boxBody.angle || 0;
-  currentRot = { x: 0, y: 0, z: angle };
-  targetRot = { x: 0, y: 0, z: angle };
-  targetFov = FOV_SHOW;
-  fovDirty = true;
-  trailParticles.visible = true;
-  lastTrailUpdate = 0; // 重置拖尾更新计时
-}
-
-// 快速过渡函数 - 用于ESC跳过发射阶段时的平滑过渡
-function startQuickTransition() {
-  phase.value = "transition";
-  transitionTime = 0;
-  phaseSwitchBuffer = 2; // 状态切换缓冲2帧
+  phaseSwitchBuffer = 2;
   Matter.Body.setVelocity(boxBody, { x: 0, y: 0 });
   Matter.Body.setAngularVelocity(boxBody, 0);
 
-  // 设置初始状态，直接从发射位置开始过渡
-  const boxX = boxBody.position.x || SLING_X;
-  const boxY = boxBody.position.y || BOX_START_Y;
+  const boxX = boxBody.position.x;
+  const boxY = boxBody.position.y;
   const angle = boxBody.angle || 0;
+  const threeY = toThreeY(boxY);
 
   currentRot = { x: 0, y: 0, z: angle };
   targetRot = { x: 0.3, y: 0.5, z: angle + 0.8 };
   targetFov = FOV_SHOW;
   fovDirty = true;
   trailParticles.visible = true;
-  lastTrailUpdate = 0; // 重置拖尾更新计时
+  lastTrailUpdate = 0;
 
-  // 显示过渡文字
-  showTransitionText.value = true;
-
-  // 设置相机目标位置
-  const threeY = toThreeY(boxY);
   targetCam.x = boxX;
   targetCam.y = threeY - 60;
   targetCam.z = CAM_Z_SHOW;
-  currentCam.x = camera.position.x;
-  currentCam.y = camera.position.y;
-  currentCam.z = camera.position.z;
+
+  // 航天器预就位（先隐藏）
+  if (spacecraft) {
+    spacecraft.position.set(boxX, threeY, 0);
+    spacecraft.rotation.set(0.3, 0.5, angle + 0.8);
+    spacecraft.scale.setScalar(0.01);
+    spacecraft.visible = false;
+  }
+  cube.visible = false;
+
+  // 阶段1：CSS 黑屏遮罩淡入
+  showFadeOverlay.value = true;
+
+  setTimeout(() => {
+    if (phase.value !== "transition") return;
+    // 阶段2：BREAK_LIMIT 文字浮现 + 航天器在黑屏背后放大
+    showTransitionText.value = true;
+    if (spacecraft) spacecraft.visible = true;
+
+    setTimeout(() => {
+      if (phase.value !== "transition") return;
+      // 阶段3：黑屏淡出，文字隐藏
+      showFadeOverlay.value = false;
+      showTransitionText.value = false;
+
+      setTimeout(() => {
+        if (phase.value !== "transition") return;
+        // 阶段4：完全露出 → 进入展示模式
+        enterShowcase();
+      }, BLACK_FADE_MS);
+    }, TEXT_HOLD_MS);
+  }, BLACK_FADE_MS);
+}
+
+// 快速过渡函数 - 用于ESC跳过发射阶段时的平滑过渡
+function startQuickTransition() {
+  phase.value = "transition";
+  transitionTime = 0;
+  phaseSwitchBuffer = 2;
+  Matter.Body.setVelocity(boxBody, { x: 0, y: 0 });
+  Matter.Body.setAngularVelocity(boxBody, 0);
+
+  const boxX = boxBody.position.x || SLING_X;
+  const boxY = boxBody.position.y || BOX_START_Y;
+  const angle = boxBody.angle || 0;
+  const threeY = toThreeY(boxY);
+
+  currentRot = { x: 0, y: 0, z: angle };
+  targetRot = { x: 0.3, y: 0.5, z: angle + 0.8 };
+  targetFov = FOV_SHOW;
+  fovDirty = true;
+  trailParticles.visible = true;
+  lastTrailUpdate = 0;
+
+  targetCam.x = boxX;
+  targetCam.y = threeY - 60;
+  targetCam.z = CAM_Z_SHOW;
+
+  if (spacecraft) {
+    spacecraft.position.set(boxX, threeY, 0);
+    spacecraft.rotation.set(0.3, 0.5, angle + 0.8);
+    spacecraft.scale.setScalar(0.01);
+    spacecraft.visible = false;
+  }
+  cube.visible = false;
+
+  showFadeOverlay.value = true;
+
+  setTimeout(() => {
+    if (phase.value !== "transition") return;
+    showTransitionText.value = true;
+    if (spacecraft) spacecraft.visible = true;
+
+    setTimeout(() => {
+      if (phase.value !== "transition") return;
+      showFadeOverlay.value = false;
+      showTransitionText.value = false;
+
+      setTimeout(() => {
+        if (phase.value !== "transition") return;
+        enterShowcase();
+      }, BLACK_FADE_MS);
+    }, TEXT_HOLD_MS);
+  }, BLACK_FADE_MS);
 }
 
 function enterShowcase() {
   showTransitionText.value = false;
+  showFadeOverlay.value = false;
   phase.value = "showcase";
   currentFov = FOV_SHOW;
   camera.fov = currentFov;
@@ -824,9 +888,12 @@ function enterDetail(lv) {
 }
 
 function nextLevel() {
-  let idx = levels.findIndex((l) => l.id === currentLevelId.value);
-  idx = (idx + 1) % levels.length;
-  const lv = levels[idx];
+  // 从当前关卡找下一个非特殊关卡（01-07 循环，08 不参与循环）
+  const normalLevels = levels.filter((l) => !l.isInspectButton);
+  let idx = normalLevels.findIndex((l) => l.id === currentLevelId.value);
+  if (idx === -1) idx = 0;
+  idx = (idx + 1) % normalLevels.length;
+  const lv = normalLevels[idx];
   currentLevelId.value = lv.id;
   currentLevel.value = lv;
   targetRot = { ...lv.rot };
@@ -868,6 +935,7 @@ function enterInspectMode(from) {
     targetRot: { ...targetRot },
     detailShow: detailShow.value,
     spacecraftScale: spacecraft.scale.x,
+    bgColor: lastBgGray,
   };
   inspectMode.value = true;
   controls.enabled = true;
@@ -888,6 +956,10 @@ function enterInspectMode(from) {
   targetCam.x = camera.position.x;
   targetCam.y = camera.position.y;
   targetCam.z = camera.position.z;
+  if (renderer) {
+    renderer.setClearColor(new THREE.Color(0x111122));
+    lastBgGray = -1;
+  }
 }
 
 function exitInspectMode() {
@@ -905,6 +977,15 @@ function exitInspectMode() {
     currentCam.x = camera.position.x;
     currentCam.y = camera.position.y;
     currentCam.z = camera.position.z;
+    if (renderer) {
+      const savedBg = preInspectState.bgColor;
+      lastBgGray = savedBg;
+      if (savedBg >= 0) {
+        renderer.setClearColor(new THREE.Color(savedBg, savedBg, savedBg));
+      } else {
+        renderer.setClearColor(new THREE.Color(0.02, 0.02, 0.04));
+      }
+    }
     preInspectState = null;
   }
 }
@@ -1039,7 +1120,7 @@ function animate(time) {
   if (bgGray !== lastBgGray) {
     if (bgGray === 0) {
       // 展示/详情模式：使用纯黑色背景
-      renderer.setClearColor(new THREE.Color(0, 0, 0));
+      renderer.setClearColor(_colorBlack);
     } else {
       // 发射/飞行阶段：使用灰度渐变
       _color.setScalar(bgGray);
@@ -1108,109 +1189,41 @@ function animate(time) {
     let t = Math.min(transitionTime / TRANSITION_DURATION, 1);
     t = easeSmooth(t);
 
-    // 使用目标旋转进行插值
+    // 旋转插值
     const rotX = currentRot.x + (targetRot.x - currentRot.x) * t;
     const rotY = currentRot.y + (targetRot.y - currentRot.y) * t;
     const rotZ = currentRot.z + (targetRot.z - currentRot.z) * t;
 
-    // ========== 过渡阶段第一部分：快速黑屏遮挡（0% - 20%时间）==========
-    if (t <= 0.2) {
-      // 立方体快速消失
-      cube.position.set(boxX, threeY, 0);
-      cube.rotation.set(rotX, rotY, rotZ);
-      cube.material.opacity = LINE_OPACITY * Math.max(0, 1 - t * 6);
-      if (t > 0.15) cube.visible = false;
+    // 立方体隐藏
+    cube.visible = false;
 
-      // 背景快速变黑（遮挡画面）
-      const bgProgress = t / 0.2;
-      _color.setScalar(1 - bgProgress);
-      renderer.setClearColor(_color);
-      lastBgGray = 1 - bgProgress;
-
-      // 文字开始淡入
-      if (t > 0.1) {
-        showTransitionText.value = true;
-      }
-    } else {
-      cube.visible = false;
+    // 航天器在黑屏背后放大
+    if (spacecraft && spacecraft.visible) {
+      spacecraft.position.set(boxX, threeY, 0);
+      spacecraft.rotation.set(rotX, rotY, rotZ);
+      const scaleT = Math.min(1, t * 2);
+      const s = 0.01 + 0.99 * easeSmooth(scaleT);
+      spacecraft.scale.setScalar(s);
     }
 
-    // ========== 过渡阶段第二部分：黑屏保持 + 文字显示 + 航天器渐显（20% - 60%时间）==========
-    if (t > 0.2 && t <= 0.6) {
-      // 保持黑屏状态
-      if (lastBgGray !== 0) {
-        _color.setScalar(0);
-        renderer.setClearColor(_color);
-        lastBgGray = 0;
-      }
-
-      // 文字保持显示
-      showTransitionText.value = true;
-
-      // 航天器在黑屏遮挡下逐渐显现
-      if (spacecraft) {
-        spacecraft.visible = true;
-        spacecraft.position.set(boxX, threeY, 0);
-        spacecraft.rotation.set(rotX, rotY, rotZ);
-
-        // 从20%开始到60%完成（40%的时间范围内完成缩放）
-        const scaleT = Math.max(0, Math.min(1, (t - 0.2) / 0.4));
-        const s = 0.1 + 0.9 * easeSmooth(scaleT);
-        spacecraft.scale.setScalar(s);
-      }
-    }
-
-    // ========== 过渡阶段第三部分：背景渐亮 + 文字淡出 + 航天器完成显现（60% - 100%时间）==========
-    if (t > 0.6) {
-      // 背景从黑色渐亮到深空色
-      const fadeT = (t - 0.6) / 0.4;
-      const bgAlpha = fadeT * 0.05;
-      _color.setRGB(bgAlpha, bgAlpha, bgAlpha * 1.2);
-      renderer.setClearColor(_color);
-      lastBgGray = -1;
-
-      // 文字逐渐淡出
-      if (t > 0.8) {
-        showTransitionText.value = false;
-      }
-
-      // 航天器完成缩放并稳定
-      if (spacecraft) {
-        spacecraft.visible = true;
-        spacecraft.position.set(boxX, threeY, 0);
-        spacecraft.rotation.set(rotX, rotY, rotZ);
-
-        // 最终缩放完成
-        const finalT = Math.max(0, Math.min(1, (t - 0.6) / 0.2));
-        const s = 0.95 + 0.05 * easeSmooth(finalT);
-        spacecraft.scale.setScalar(s);
-      }
-    }
-
-    // 相机平滑移动（全程）
+    // 相机平滑移动
     const targetCamX = boxX;
     const targetCamY = threeY - 60;
     const targetCamZ = CAM_Z_SHOW;
-
-    // 分段相机速度：前期慢，后期快
-    let camSpeed;
-    if (t < 0.3) camSpeed = 0.03;
-    else if (t < 0.7) camSpeed = 0.06;
-    else camSpeed = 0.1;
-
+    const camSpeed = 0.06;
     currentCam.x += (targetCamX - currentCam.x) * camSpeed;
     currentCam.y += (targetCamY - currentCam.y) * camSpeed;
     currentCam.z += (targetCamZ - currentCam.z) * camSpeed;
 
-    // FOV平滑调整 - 增大阈值减少更新频率
-    const newFov = currentFov + (targetFov - currentFov) * 0.03;
+    // FOV 平滑
+    const newFov = currentFov + (targetFov - currentFov) * 0.05;
     if (Math.abs(newFov - currentFov) > 0.2) {
       currentFov = newFov;
       camera.fov = currentFov;
       fovDirty = true;
     }
 
-    // 拖尾粒子效果 - 减少更新频率（每50ms更新一次）
+    // 拖尾粒子
     if (time - lastTrailUpdate > 50) {
       const trailPos = trailParticles.geometry.attributes.position.array;
       const idx = Math.floor(t * 79) * 3;
@@ -1220,32 +1233,7 @@ function animate(time) {
       trailParticles.geometry.attributes.position.needsUpdate = true;
       lastTrailUpdate = time;
     }
-
-    // 过渡完成
-    if (transitionTime >= TRANSITION_DURATION) {
-      phase.value = "showcase";
-      showTransitionText.value = false;
-      currentFov = FOV_SHOW;
-      camera.fov = currentFov;
-      fovDirty = true;
-      targetCam.x = boxX;
-      targetCam.y = threeY - 60;
-      targetCam.z = CAM_Z_SHOW;
-      currentCam.x = targetCam.x;
-      currentCam.y = targetCam.y;
-      currentCam.z = targetCam.z;
-      currentRot = { x: 0.3, y: 0.5, z: targetRot.z };
-      targetRot = { ...currentRot };
-      trailParticles.visible = false;
-      cube.visible = false;
-      if (spacecraft) {
-        spacecraft.visible = true;
-        spacecraft.scale.setScalar(1);
-      }
-      // 确保背景是深空色
-      _color.setRGB(0.05, 0.05, 0.06);
-      renderer.setClearColor(_color);
-    }
+    // 注：enterShowcase() 由 setTimeout 链触发，不在此处检测
   } else if (currentPhase === "showcase") {
     const actualY = threeY;
     const targetX = boxX;
@@ -1309,9 +1297,11 @@ function animate(time) {
     currentCam.z = camera.position.z;
   } else {
     if (currentPhase !== "transition") {
-      currentCam.x += (targetCam.x - currentCam.x) * 0.12;
-      currentCam.y += (targetCam.y - currentCam.y) * 0.12;
-      currentCam.z += (targetCam.z - currentCam.z) * 0.12;
+      // 飞行阶段用高跟随时系数，避免相机追不上快速移动的立方体导致视觉抽动
+      const lerpFactor = currentPhase === "flying" ? 0.35 : 0.12;
+      currentCam.x += (targetCam.x - currentCam.x) * lerpFactor;
+      currentCam.y += (targetCam.y - currentCam.y) * lerpFactor;
+      currentCam.z += (targetCam.z - currentCam.z) * lerpFactor;
     }
     camera.position.set(currentCam.x, currentCam.y, currentCam.z);
     if (fovDirty) {
@@ -1416,57 +1406,81 @@ function handleKeyDown(e) {
  * 使用平滑过渡动画，让用户体验更流畅
  */
 function enterShowcaseDirectly() {
-  // 立即停止物理模拟
+  // 立即停止物理模拟，把立方体放到展示位置
   if (boxBody) {
     Matter.Body.setVelocity(boxBody, { x: 0, y: 0 });
     Matter.Body.setAngularVelocity(boxBody, 0);
-    // 将物体移动到展示位置
     Matter.Body.setPosition(boxBody, { x: SLING_X, y: BOUNDARY_Y - 50 });
   }
 
-  // 立即进入transition阶段，但使用更短的过渡时间
-  phase.value = "transition";
-  transitionTime = TRANSITION_DURATION * 0.3; // 从30%开始，快速完成
-  phaseSwitchBuffer = 2;
-
-  // 设置初始状态
   const boxX = SLING_X;
   const boxY = BOUNDARY_Y - 50;
   const threeY = toThreeY(boxY);
+  const angle = boxBody?.angle || 0;
 
-  currentRot = { x: 0.15, y: 0.25, z: 0.4 };
-  targetRot = { x: 0.3, y: 0.5, z: 0.8 };
+  currentRot = { x: 0.15, y: 0.25, z: angle };
+  targetRot = { x: 0.3, y: 0.5, z: angle + 0.4 };
   targetFov = FOV_SHOW;
   fovDirty = true;
+  trailParticles.visible = true;
+  lastTrailUpdate = 0;
 
-  // 显示过渡文字
-  showTransitionText.value = true;
-
-  // 设置相机目标位置
   targetCam.x = boxX;
   targetCam.y = threeY - 60;
   targetCam.z = CAM_Z_SHOW;
-  currentCam.x = camera.position.x;
-  currentCam.y = camera.position.y;
-  currentCam.z = camera.position.z;
 
-  // 立即设置背景为深空色
-  _color.setRGB(0.02, 0.02, 0.03);
-  renderer.setClearColor(_color);
-  lastBgGray = -1;
+  // 航天器预就位
+  if (spacecraft) {
+    spacecraft.position.set(boxX, threeY, 0);
+    spacecraft.rotation.set(0.3, 0.5, angle + 0.4);
+    spacecraft.scale.setScalar(0.01);
+    spacecraft.visible = false;
+  }
+  cube.visible = false;
+
+  // 进入过渡，从 30% 进度开始让相机已经动了一部分
+  phase.value = "transition";
+  transitionTime = TRANSITION_DURATION * 0.3;
+  phaseSwitchBuffer = 2;
+
+  // 与 beginTransition 使用同一套 setTimeout 过渡链
+  showFadeOverlay.value = true;
+
+  setTimeout(() => {
+    if (phase.value !== "transition") return;
+    showTransitionText.value = true;
+    if (spacecraft) spacecraft.visible = true;
+
+    setTimeout(() => {
+      if (phase.value !== "transition") return;
+      showFadeOverlay.value = false;
+      showTransitionText.value = false;
+
+      setTimeout(() => {
+        if (phase.value !== "transition") return;
+        enterShowcase();
+      }, BLACK_FADE_MS);
+    }, TEXT_HOLD_MS);
+  }, BLACK_FADE_MS);
 }
 
 // 返回首页
 function goToHomeWithLoading() {
   showFadeOverlay.value = true;
   setTimeout(() => {
-    localStorage.setItem("homeScrollPosition", String(window.scrollY));
+    // 【修复】不要覆盖 HomePage 的 router.beforeEach 已保存的滚动位置
+    // HomePage 会在离开时保存真实滚动位置(currentY.value)，这里用 window.scrollY=0 会覆盖掉
+    if (!localStorage.getItem("homeScrollPosition")) {
+      localStorage.setItem("homeScrollPosition", String(window.scrollY));
+    }
     router.push("/");
   }, 500);
 }
 
 onMounted(async () => {
   try {
+    // 声明当前页面属于 'about' 音频组
+    audioManager.ensureGroup("about");
     // 主题音乐模式：不需要从 sessionStorage 恢复，主题音乐会保持播放
     console.log("[About Page] 主题音乐模式，音乐由 audioManager 管理");
 
@@ -1593,19 +1607,37 @@ function enterShowcaseFromSubpage() {
 }
 
 onDeactivated(() => {
-  console.log("[About] 组件被缓存（离开），暂停渲染");
+  console.log("[About] 组件被缓存（离开），暂停渲染与定时器");
   isPageActive = false;
+  // 【修复】清理所有可能导致黑屏的状态，防止 keep-alive 恢复时残留
+  showFadeOverlay.value = false;
+  showTransitionText.value = false;
   if (rafId) {
     cancelAnimationFrame(rafId);
     rafId = null;
   }
+  // 【新增】离开页面时暂停定时器，减少后台资源占用
+  if (timeInterval) clearInterval(timeInterval);
+  if (distInterval) clearInterval(distInterval);
+  timeInterval = null;
+  distInterval = null;
 });
 
 onActivated(() => {
-  console.log("[About] 组件被激活（返回），恢复渲染");
+  console.log("[About] 组件被激活（返回），恢复渲染与定时器");
   isPageActive = true;
   if (!rafId) {
     rafId = requestAnimationFrame(animate);
+  }
+  // 【新增】恢复定时器
+  if (!timeInterval) {
+    updateTimeData();
+    timeInterval = setInterval(updateTimeData, 1000);
+  }
+  if (!distInterval) {
+    distInterval = setInterval(() => {
+      distanceKm.value += 17;
+    }, 1000);
   }
 });
 
@@ -2036,7 +2068,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 20;
+  z-index: 10000;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.8s ease;

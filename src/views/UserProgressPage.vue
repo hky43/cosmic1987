@@ -34,8 +34,8 @@
         </button>
       </div>
 
-      <!-- 3D 舞台 -->
-      <div class="stage" :style="stageStyle">
+      <!-- 3D 舞台 — v-if 控制：隐藏时彻底销毁以释放GPU/CPU资源 -->
+      <div v-if="shouldRenderHeavyContent" class="stage" :style="stageStyle">
         <div class="tilt-layer" :style="tiltStyle">
           <!-- 翻转层 -->
           <div class="flip-layer" :style="flipStyle">
@@ -261,6 +261,8 @@
         <span>按 ESC 退出特写</span>
         <span>{{ isPlaying ? "▶ 播放中" : "⏸ 已暂停" }}</span>
       </div>
+      <!-- 占位：组件暂停时保留布局空间，避免页面跳动 -->
+      <div v-else class="stage-placeholder" />
     </div>
   </div>
 </template>
@@ -369,12 +371,12 @@ const currentTrack = computed(() => tracks[currentTrackIndex.value]);
 const stageStyle = computed(() => {
   if (isCircleFocused.value) {
     return {
-      transform: `translateX(${FOCUS_OFFSET_X}px) translateY(${FOCUS_OFFSET_Y}px) translateZ(${CAMERA_PUSH}px)`,
+      transform: `translate(calc(-50% + ${FOCUS_OFFSET_X}px), calc(-50% + ${FOCUS_OFFSET_Y}px)) translateZ(${CAMERA_PUSH}px)`,
       transition: "transform 0.9s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
     };
   }
   return {
-    transform: "translateX(0) translateY(0) translateZ(0)",
+    transform: "translate(-50%, -50%)",
     transition: "transform 0.9s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
   };
 });
@@ -733,6 +735,13 @@ function onKeyDown(e) {
 
 const cardRef = ref(null);
 
+// ==================== 组件暂停/恢复机制 ====================
+// 当 showProgressPage 为 false 时，延迟销毁 3D 舞台以释放 GPU/CPU
+// 延迟时间匹配 CSS slide-out 动画时长（0.6s）
+const HEAVY_RENDER_DESTROY_DELAY = 650;
+const shouldRenderHeavyContent = ref(false);
+let heavyRenderTimer = null;
+
 // ==================== 监听 ====================
 
 watch(currentMusicIndex, (newIndex) => {
@@ -757,12 +766,36 @@ watch(
 watch(
   () => props.showProgressPage,
   (newVal) => {
+    // 清除之前的延迟定时器
+    if (heavyRenderTimer) {
+      clearTimeout(heavyRenderTimer);
+      heavyRenderTimer = null;
+    }
+
     if (newVal) {
+      // 页面滑入：立即恢复渲染
+      shouldRenderHeavyContent.value = true;
       document.body.style.overflow = "hidden";
       document.documentElement.style.overflow = "hidden";
+      // 注册交互事件监听
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("keydown", onKeyDown);
     } else {
+      // 页面滑出：先保持渲染以播放滑出动画，再延迟销毁
       document.body.style.overflow = "";
       document.documentElement.style.overflow = "";
+      // 立即移除事件监听，停止响应交互
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("keydown", onKeyDown);
+      // 重置交互状态
+      if (isCircleFocused.value) isCircleFocused.value = false;
+      if (isFlipped.value) isFlipped.value = false;
+      resetMouseTilt();
+      // 延迟销毁重型 3D 舞台
+      heavyRenderTimer = setTimeout(() => {
+        shouldRenderHeavyContent.value = false;
+        heavyRenderTimer = null;
+      }, HEAVY_RENDER_DESTROY_DELAY);
     }
   },
   { immediate: true },
@@ -771,11 +804,12 @@ watch(
 // ==================== 生命周期 ====================
 
 onMounted(() => {
-  // 【修复】优先注册事件监听，防止 audioManager 初始化报错阻断交互功能
-  window.addEventListener("mousemove", onMouseMove);
-  window.addEventListener("keydown", onKeyDown);
+  // 声明当前页面属于 'home' 音频组
+  audioManager.ensureGroup("home");
+  // 注意：mousemove/keydown 事件由 showProgressPage watcher 按需管理，
+  // 避免组件隐藏时持续消耗 CPU
 
-  // 【修复】使用 nextTick 确保 DOM 完全就绪，并用 try-catch 隔离音频错误
+  // 使用 nextTick 确保 DOM 完全就绪，并用 try-catch 隔离音频错误
   nextTick(() => {
     try {
       // 确保 audioManager 在 home 组
@@ -790,10 +824,12 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  // 安全移除事件监听（防止 watcher 未清理的情况）
   window.removeEventListener("mousemove", onMouseMove);
   window.removeEventListener("keydown", onKeyDown);
   if (resetTimer) clearTimeout(resetTimer);
   if (contentFadeTimeout) clearTimeout(contentFadeTimeout);
+  if (heavyRenderTimer) clearTimeout(heavyRenderTimer);
 });
 </script>
 
@@ -912,8 +948,10 @@ onUnmounted(() => {
 
 /* ==================== 3D 舞台 ==================== */
 .stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
   transform-style: preserve-3d;
-  position: relative;
   width: var(--sleeve-size);
   height: var(--sleeve-size);
   z-index: 1;
@@ -1704,5 +1742,14 @@ onUnmounted(() => {
   user-select: none;
   pointer-events: none;
   z-index: 10;
+}
+
+/* ==================== 组件暂停模式 ==================== */
+/* 占位元素：保持布局稳定，当 3D 舞台被 v-if 销毁时不引起页面跳动 */
+.stage-placeholder {
+  width: var(--sleeve-size);
+  height: var(--sleeve-size);
+  visibility: hidden;
+  pointer-events: none;
 }
 </style>

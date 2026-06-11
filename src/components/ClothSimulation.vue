@@ -565,7 +565,7 @@ const gridSelection = ref("1");
 
 // 赞助图片相关
 const sponsorImageExists = ref(false);
-const sponsorImageSrc = ref("/sponsor.png");
+const sponsorImageSrc = ref("");
 
 // 模板选择弹窗
 const showTemplateModal = ref(false);
@@ -867,7 +867,7 @@ function initThree() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.VSMShadowMap;
-  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setClearColor(0x000000, 0);
   canvasContainer.value.appendChild(renderer.domElement);
 
@@ -1148,7 +1148,7 @@ function attachTextureToMesh(geo, receiptLength, receiptWidth) {
     if (!textureSource) return;
 
     const tex = new THREE.Texture(textureSource);
-    tex.encoding = THREE.sRGBEncoding;
+    tex.colorSpace = THREE.SRGBColorSpace;
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
     tex.minFilter = THREE.LinearMipmapLinearFilter;
     tex.magFilter = THREE.LinearFilter;
@@ -1586,6 +1586,7 @@ function rebuildCloth() {
 
 // 检查赞助图片是否存在
 function checkSponsorImageExists() {
+  if (!sponsorImageSrc.value) return;
   const img = new Image();
   img.onload = () => {
     sponsorImageExists.value = true;

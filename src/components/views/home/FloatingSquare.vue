@@ -16,11 +16,19 @@
       <!-- 方块 -->
       <div
         class="floating-square"
-        :class="{ 'is-locked': isDragDisabled }"
+        :class="{ 'is-locked': isDragDisabled, 'has-image': resolvedImageSrc }"
         :style="squareStyle"
         @mousedown="handleDragStart"
         @touchstart.prevent="handleDragStart"
-      ></div>
+      >
+        <img
+          v-if="resolvedImageSrc"
+          :src="resolvedImageSrc"
+          :alt="imageAlt"
+          class="square-image"
+          draggable="false"
+        />
+      </div>
     </div>
 
     <!-- 全屏白色背景层 -->
@@ -29,9 +37,10 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted } from "vue";
+import { ref, computed, watch, onUnmounted, inject, watchEffect } from "vue";
 import { useRouter } from "vue-router";
 import WhiteOverlay from "./WhiteOverlay.vue";
+import { asset } from "@/utils/asset";
 
 const router = useRouter();
 let redirectTimer = null;
@@ -57,9 +66,22 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  imageSrc: {
+    type: String,
+    default: "images/decorations/命苦-1.jpg",
+  },
+  imageAlt: {
+    type: String,
+    default: "悬浮方块图片",
+  },
 });
 
 const emit = defineEmits(["close", "show-overlay"]);
+
+const resolvedImageSrc = computed(() => {
+  if (!props.imageSrc) return "";
+  return asset(props.imageSrc);
+});
 
 const SQUARE_SIZE = 80;
 const GRAVITY = 0.05; // 减小重力，下落更慢
@@ -366,6 +388,21 @@ const cancelRedirect = () => {
 
 onUnmounted(() => {
   cancelRedirect();
+  if (gravityRafId) {
+    cancelAnimationFrame(gravityRafId);
+    gravityRafId = null;
+  }
+});
+
+/* 【新增】HomePage keep-alive 暂停/恢复 */
+const pageActive = inject("isPageActive", ref(true));
+watchEffect(() => {
+  if (!pageActive.value) {
+    if (gravityRafId) {
+      cancelAnimationFrame(gravityRafId);
+      gravityRafId = null;
+    }
+  }
 });
 
 const endDrag = () => {
@@ -497,12 +534,18 @@ const getMaxRopeLength = () => {
   return props.maxRopeLength > 0 ? props.maxRopeLength : window.innerHeight / 2;
 };
 
-const squareStyle = computed(() => ({
-  left: `${squareX.value}px`,
-  top: `${squareY.value}px`,
-  width: `${SQUARE_SIZE}px`,
-  height: `${SQUARE_SIZE}px`,
-}));
+const squareStyle = computed(() => {
+  const base = {
+    left: `${squareX.value}px`,
+    top: `${squareY.value}px`,
+    width: `${SQUARE_SIZE}px`,
+    height: `${SQUARE_SIZE}px`,
+  };
+  if (props.imageSrc) {
+    base.background = "transparent";
+  }
+  return base;
+});
 
 const anchorStyle = computed(() => ({
   left: `${anchorX.value - 6}px`,
@@ -520,6 +563,23 @@ const ropeContainerStyle = computed(() => ({
 </script>
 
 <style scoped>
+.floating-square {
+  overflow: hidden;
+}
+
+.floating-square.has-image {
+  background: transparent !important;
+}
+
+.square-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 .floating-square.is-locked {
   cursor: not-allowed;
   opacity: 0.7;

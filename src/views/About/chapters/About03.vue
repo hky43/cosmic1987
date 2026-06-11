@@ -180,6 +180,7 @@ function handleKeyDown(e) {
 }
 
 onMounted(() => {
+  audioManager.ensureGroup('about')
   window.addEventListener("keydown", handleKeyDown);
   updateCurrentPage();
 });

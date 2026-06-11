@@ -3,7 +3,7 @@
  * 负责管理整个应用的音频播放，避免多个组件同时控制音频导致冲突
  */
 import { ref } from 'vue';
-import { Howl } from 'howler';
+import { Howl, Howler } from 'howler';
 import { asset } from './asset';
 
 // 预先定义 trackGroups 数据
@@ -17,12 +17,12 @@ const trackGroupsData = {
   
   // About 页面
   about: [
-    { id: "about-1", title: "Voyager Theme", url: asset("music/The 1999 - 为了什么.mp3") },
+    { id: "about-1", title: "Voyager Theme", url: asset("music/The 1999 - 冷空气.mp3") },
   ],
   
   // Travel 页面
   travel: [
-    { id: "travel-1", title: "Star Travel", url: asset("music/The 1999 - 冷空气.mp3") },
+    { id: "travel-1", title: "Star Travel", url: asset("music/The 1999 - 为了什么.mp3") },
   ],
   
   // CosmicArchive 页面
@@ -38,6 +38,9 @@ const trackGroupsData = {
 
 class AudioManager {
   constructor() {
+    // 增大 HTML5 Audio 池大小，防止快速切换时池耗尽
+    Howler.html5PoolSize = 100;
+
     // 当前音频实例
     this.sound = null;
     
@@ -93,6 +96,9 @@ class AudioManager {
     this._pendingPlayCallback = null; // 等待加载完成后的回调
     this._startTime = 0; // 音频加载后的起始播放位置
     
+    // 最后处理的路径（用于 ensureGroup 校验，防止过时页面误切音乐）
+    this._lastSwitchedPath = '';
+
     // 调试用：暴露到 window，方便浏览器控制台测试
     window.audioManager = this;
     this.log('[AudioManager] 🔧 已暴露到 window.audioManager，可在控制台测试！');
@@ -114,6 +120,59 @@ class AudioManager {
   }
 
   /**
+   * 页面显式声明音频组标签
+   * 由各页面 onMounted 调用，告知 audioManager 当前页面属于哪个组
+   * - 同组 → 不切换，继续播放
+   * - 不同组 → 保存旧状态，切换到新组
+   * @param {string} tag - 组标签 (home/about/travel/cosmicArchive/future/test)
+   * @param {Object} options - 配置选项
+   */
+  ensureGroup(tag, options = {}) {
+    if (!tag || !this.trackGroups[tag]) {
+      this.warn('[AudioManager] ensureGroup 收到无效标签:', tag, '，回退到 home');
+      tag = 'home';
+    }
+
+    if (tag === 'test') {
+      this.log('[AudioManager] test 页面，不播放音乐，释放音频实例');
+      this.saveGroupState();
+      this.currentGroup.value = tag;
+      this.stop();
+      this._removeAutoPlayListeners();
+      if (this.sound) {
+        this.sound.unload();
+        this.sound = null;
+      }
+      return;
+    }
+
+    // 主题音乐模式锁定中：音乐由 LightMonologue 唱片控制，跳过标签切换
+    if (this.isThemeMusicActive.value) {
+      this.log('[AudioManager] 主题音乐模式锁定中，跳过标签切换 (页面标签: ' + tag + ')');
+      return;
+    }
+
+    // 防竞态：如果当前路由路径与声明的标签不匹配，说明该页面已过时（快速导航导致）
+    if (this._lastSwitchedPath) {
+      const pathGroup = this.getGroupFromPath(this._lastSwitchedPath);
+      if (pathGroup !== tag) {
+        this.warn('[AudioManager] 页面标签 ' + tag + ' 与当前路径组 ' + pathGroup + ' 不匹配，忽略此次声明（页面已过时）');
+        return;
+      }
+    }
+
+    if (tag === this.currentGroup.value) {
+      this.log('[AudioManager] 已在相同页面组 ' + tag + '，不切换音乐');
+      return;
+    }
+
+    this.log('[AudioManager] 页面声明切换: ' + this.currentGroup.value + ' -> ' + tag);
+    this.saveGroupState();
+    this.currentGroup.value = tag;
+    this.restoreGroupState(options);
+  }
+
+  /**
    * 获取当前组的曲目列表
    * @returns {Array} 曲目列表
    */
@@ -132,7 +191,9 @@ class AudioManager {
       this.log('[AudioManager] 主题音乐模式，不随路由切换音乐');
       return;
     }
-    
+
+    // 记录最后处理的路径（用于 ensureGroup 防竞态）
+    this._lastSwitchedPath = path;
     const group = this.getGroupFromPath(path);
     
     // 情况 1：完全没有音频（首次加载或刷新）→ 根据标签匹配决策
@@ -174,18 +235,29 @@ class AudioManager {
       return;
     }
     
-    // 情况 3：进入 test 页面 → 停止音乐，不恢复任何音频
+    // 情况 3：进入 test 页面 → 完全停止音乐并释放音频实例，防止误触播放
     if (group === 'test') {
-      this.log('[AudioManager] 进入 test 页面，停止所有音乐');
+      this.log('[AudioManager] 进入 test 页面，停止所有音乐并释放音频实例');
       this.saveGroupState();
       this.currentGroup.value = group;
+      this._removeAutoPlayListeners();
       this.stop();
+      if (this.sound) {
+        this.sound.unload();
+        this.sound = null;
+      }
       return;
     }
     
     // 情况 4：真的切换组 → 正常流程
     this.log(`[AudioManager] 切换页面: ${this.currentGroup.value} -> ${group}`);
-    
+
+    // 如果正从首页离开，主动移除交互自启监听器
+    // 避免残留监听器在其他页面点击触发首页音乐播放
+    if (this.currentGroup.value === 'home' && group !== 'home') {
+      this._removeAutoPlayListeners();
+    }
+
     // 如果正在切换中（如首页初始化加载时用户就跳转了），强制取消当前操作
     if (this.isSwitching.value) {
       this.log('[AudioManager] 强制取消当前切换锁，准备组切换');
@@ -199,13 +271,13 @@ class AudioManager {
       this._pendingPlayCallback = null;
       this._startTime = 0;
     }
-    
+
     // 保存当前组的播放状态
     this.saveGroupState();
-    
+
     // 切换到新组
     this.currentGroup.value = group;
-    
+
     // 恢复新组的播放状态
     this.restoreGroupState(options);
   }
@@ -218,8 +290,8 @@ class AudioManager {
   setThemeMusic(track, options = {}) {
     this.log('[AudioManager] 切换到主题音乐:', track);
     
-    // 保存当前首页音乐状态
-    if (this.currentGroup.value === 'home' && this.sound) {
+    // 保存当前首页音乐状态（仅首次，避免 navigateTo 重复调用覆盖）
+    if (this.currentGroup.value === 'home' && this.sound && !this.homePlaybackState) {
       this.homePlaybackState = {
         trackId: this.currentTrack.value?.id,
         trackIndex: this.currentTrackIndex.value,
@@ -294,6 +366,15 @@ class AudioManager {
    */
   saveGroupState() {
     const group = this.currentGroup.value;
+
+    // 主题音乐模式下，禁止覆盖 home 组状态
+    // LightMonologue setThemeMusic → switchTrack → saveGroupState 会误把唱片音乐存到 home
+    // 真实 home 状态已在 setThemeMusic 中保存为 homePlaybackState
+    if (this.isThemeMusicActive.value && group === 'home') {
+      this.log('[AudioManager] 主题音乐模式，跳过保存 home 组状态（保护真实首页音乐）');
+      return;
+    }
+
     this.playbackStates[group] = {
       trackId: this.currentTrack.value?.id,
       trackIndex: this.currentTrackIndex.value,
@@ -318,22 +399,20 @@ class AudioManager {
    */
   loadStatesFromStorage() {
     try {
-      // 检查是否是首次访问（使用 sessionStorage 标记）
-      const isFirstVisit = sessionStorage.getItem('audioFirstVisitEver') !== 'false';
-      
-      if (isFirstVisit) {
-        // 首次访问：清理旧的 localStorage 状态，确保全新体验
-        localStorage.removeItem('audioPlaybackStates');
-        localStorage.removeItem('audioCurrentTag');
-        sessionStorage.setItem('audioFirstVisitEver', 'false');
-        this.log('首次访问，已清理旧的 localStorage 状态');
-        return;
-      }
-
-      // 不是首次访问：恢复播放状态
+      // 始终尝试从 localStorage 恢复播放状态，不依赖 sessionStorage 标记
+      // (sessionStorage 在部分浏览器/设置下刷新后可能被清空，导致状态丢失)
       const statesStr = localStorage.getItem('audioPlaybackStates');
       if (statesStr) {
-        this.playbackStates = JSON.parse(statesStr);
+        const parsed = JSON.parse(statesStr);
+        // 过滤掉过期状态（超过 24 小时未更新的自动清理）
+        const now = Date.now();
+        const staleThreshold = 24 * 60 * 60 * 1000;
+        Object.keys(parsed).forEach((key) => {
+          if (parsed[key]?.savedAt && now - parsed[key].savedAt > staleThreshold) {
+            delete parsed[key];
+          }
+        });
+        this.playbackStates = parsed;
         this.log('从 localStorage 恢复播放状态', this.playbackStates);
       }
 
@@ -400,27 +479,16 @@ class AudioManager {
       this.log(`[AudioManager] ${group} 没有保存状态（首次进入），播第一首`);
       this.currentTrackIndex.value = 0;
       if (tracks.length > 0) {
-        if (group === 'home') {
-          // 首页首次进入：尝试自动播放
-          this.switchTrack(tracks[0], {
-            autoPlay: false,
-            ...options,
-          });
-          setTimeout(() => {
-            this.log('[AudioManager] 等待 500ms 后尝试播放...');
-            this.play().catch(err => {
-              this.warn('[AudioManager] 自动播放被浏览器阻止', err);
-              this._setupAutoPlayOnFirstInteraction();
-            });
-          }, 500);
-        } else {
-          // 其他页面首次进入：不自动播放
-          this.switchTrack(tracks[0], {
-            autoPlay: false,
-            ...options,
-          });
-        }
+        this.switchTrack(tracks[0], {
+          autoPlay: false,
+          ...options,
+        });
       }
+    }
+
+    // home 组页面：注册交互自启监听，确保所有 home 标签页面都能"点击播放"
+    if (group === 'home') {
+      this._setupAutoPlayOnFirstInteraction();
     }
   }
 
@@ -499,7 +567,13 @@ class AudioManager {
       },
       onplayerror: (id, error) => {
         this.error('❌ 播放失败', error);
-        this.sound?.once('unlock', () => this.sound?.play());
+        const currentSound = this.sound;
+        if (!currentSound) return;
+        currentSound.once('unlock', () => {
+          if (this.sound === currentSound) {
+            currentSound.play();
+          }
+        });
       },
       onplay: () => {
         this.isPlaying.value = true;
@@ -640,6 +714,12 @@ class AudioManager {
    * 播放
    */
   play() {
+    // test 页面：拒绝播放任何全局音乐
+    if (this.currentGroup.value === 'test') {
+      this.log('🔕 test 页面，拒绝播放');
+      return Promise.reject(new Error('Music disabled on test page'));
+    }
+
     if (!this.sound) {
       this.log('⚠️ 没有音频实例');
       return Promise.reject(new Error('No audio instance'));
@@ -824,34 +904,63 @@ class AudioManager {
 
   /**
    * 设置在用户第一次交互后自动播放（处理浏览器自动播放策略限制）
+   * 仅限 home 组页面（HomePage、UserProgressPage 等）生效
    */
   _setupAutoPlayOnFirstInteraction() {
+    // 仅 home 组允许——非 home 组页面直接返回，不注册任何全局监听
+    if (this.currentGroup.value !== 'home') {
+      this.log('🔕 非 home 组页面，不设置交互自启监听');
+      return;
+    }
+
     // 避免重复设置监听器
     if (this._autoPlayListenerSet) return;
-    
+
     this._autoPlayListenerSet = true;
-    
+
     const events = ['click', 'touchstart', 'keydown', 'mousedown'];
     const tryPlayOnInteraction = () => {
       if (!this.isPlaying.value && this.sound) {
         this.log('🎯 检测到用户交互，尝试播放音频');
         this.play();
       }
-      
+
       // 移除所有事件监听器
       events.forEach(event => {
         document.removeEventListener(event, tryPlayOnInteraction, true);
       });
-      
+
       this._autoPlayListenerSet = false;
+      this._autoPlayListenerFn = null;
     };
-    
+
+    // 保存引用，方便离开首页时主动清理
+    this._autoPlayListenerFn = tryPlayOnInteraction;
+    this._autoPlayEvents = events;
+
     // 为多个用户交互事件添加监听器（使用捕获阶段）
     events.forEach(event => {
       document.addEventListener(event, tryPlayOnInteraction, true);
     });
-    
-    this.log('🔔 已设置用户交互监听，等待第一次点击/触摸后自动播放');
+
+    this.log('🔔 已设置用户交互监听（home 组），等待第一次点击/触摸后自动播放');
+  }
+
+  /**
+   * 移除自动播放交互监听器（离开 home 组页面时调用）
+   */
+  _removeAutoPlayListeners() {
+    if (!this._autoPlayListenerSet || !this._autoPlayListenerFn) return;
+
+    const events = this._autoPlayEvents || ['click', 'touchstart', 'keydown', 'mousedown'];
+    events.forEach(event => {
+      document.removeEventListener(event, this._autoPlayListenerFn, true);
+    });
+
+    this._autoPlayListenerSet = false;
+    this._autoPlayListenerFn = null;
+    this._autoPlayEvents = null;
+    this.log('🔕 已移除交互自启监听器（离开 home 组）');
   }
 
   /**
@@ -902,6 +1011,7 @@ class AudioManager {
    * 销毁音频实例
    */
   destroy() {
+    this._removeAutoPlayListeners();
     this.stopFade();
     this.stopProgressUpdate();
     this.stop();

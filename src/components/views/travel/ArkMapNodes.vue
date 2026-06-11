@@ -104,14 +104,23 @@
       <div class="art-container">
         <!-- 【划分位置】ART-TEXT-START -->
         <div class="art-text">
-          <span class="line1 animate-word">上升，</span>
-          <span class="line2 animate-word-delay">苏联</span>
+          <span class="line1" :class="{ 'animate-word': !introPlayed }"
+            >上升，</span
+          >
+          <span class="line2" :class="{ 'animate-word-delay': !introPlayed }"
+            >苏联</span
+          >
         </div>
         <!-- 【划分位置】ART-TEXT-END -->
 
         <!-- 【划分位置】STAMP-START -->
         <!-- 装饰语录：风格与艺术字统一，红字黑边 + 粗砺印刷颗粒 -->
-        <div class="russian-stamp animate-final-stamp">1957 · 1961 · 永恒</div>
+        <div
+          class="russian-stamp"
+          :class="{ 'animate-final-stamp': !introPlayed }"
+        >
+          1957 · 1961 · 永恒
+        </div>
         <!-- 【划分位置】STAMP-END -->
       </div>
     </div>
@@ -141,8 +150,15 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
+
+/* ==================== 艺术字首访动画控制 ==================== */
+const INTRO_KEY = "arkMapIntroPlayed";
+const introPlayed = ref(sessionStorage.getItem(INTRO_KEY) === "true");
+if (!introPlayed.value) {
+  sessionStorage.setItem(INTRO_KEY, "true");
+}
 
 /* ==================== Props ==================== */
 const props = defineProps({

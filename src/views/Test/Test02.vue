@@ -186,11 +186,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import WhiteOverlay from "../../components/views/home/WhiteOverlay.vue";
 import { asset } from "@/utils/asset";
+import { audioManager } from "../../utils/audioManager";
 
 const containerRef = ref(null);
 const lyricsContentRef = ref(null);
@@ -882,7 +883,8 @@ const stopLyricsUpdate = () => {
 
 // 图片切换
 let fadeTimeout = null;
-let imageDisplayStartTime = 0; // 当前图片开始展示的时间戳，用于冷却判定
+let imageDelayTimer = null;
+let imageDisplayStartTime = 0;
 
 const switchImage = (direction) => {
   if (isTransitioning.value) return;
@@ -893,17 +895,28 @@ const switchImage = (direction) => {
   const elapsed = Date.now() - imageDisplayStartTime;
   if (elapsed < cooldown) return;
 
+  // 清理旧定时器
   if (fadeTimeout) {
     clearTimeout(fadeTimeout);
     fadeTimeout = null;
   }
+  if (imageDelayTimer) {
+    clearTimeout(imageDelayTimer);
+    imageDelayTimer = null;
+  }
 
   isTransitioning.value = true;
-  isImageFadingOut.value = true;
-  isImageVisible.value = false;
 
-  fadeTimeout = setTimeout(() => {
+  // Step 1: 淡出当前图片（CSS transition 驱动）
+  isImageVisible.value = false;
+  isImageFadingIn.value = false;
+  isImageFadingOut.value = true;
+
+  // Step 2: fadeOutDuration 后切换图片 + 播放音频
+  fadeTimeout = setTimeout(async () => {
     isImageFadingOut.value = false;
+
+    // 切换图片索引（在图片不可见时完成，用户看不到闪变）
     if (direction === "next") {
       currentImageIndex.value =
         (currentImageIndex.value + 1) % imagePaths.length;
@@ -912,22 +925,30 @@ const switchImage = (direction) => {
         (currentImageIndex.value - 1 + imagePaths.length) % imagePaths.length;
     }
 
-    requestAnimationFrame(() => {
-      switchToAudio(currentImageIndex.value);
-      preloadLyrics(currentImageIndex.value);
-    });
+    // 确保 Vue DOM 更新后再操作
+    await nextTick();
 
-    // 无空白等待：fade-out 后立即 fade-in，消除卡顿感
-    fadeTimeout = setTimeout(() => {
+    // Step 3: 立即播放音频
+    switchToAudio(currentImageIndex.value);
+    preloadLyrics(currentImageIndex.value);
+
+    // Step 4: 等待 imageDelays 毫秒后淡入新图片（适配歌曲节拍）
+    const delay =
+      imageDelays[currentImageIndex.value] ||
+      animationConfig.defaultSwitchDelay;
+
+    imageDelayTimer = setTimeout(async () => {
+      await nextTick();
       isImageFadingIn.value = true;
-      imageDisplayStartTime = Date.now(); // 记录新图片展示起始时间
+      imageDisplayStartTime = Date.now();
+
       fadeTimeout = setTimeout(() => {
         isImageFadingIn.value = false;
         isImageVisible.value = true;
         isTransitioning.value = false;
         fadeTimeout = null;
       }, animationConfig.fadeInDuration);
-    }, 50); // 极短间隙确保 DOM 更新
+    }, delay);
   }, animationConfig.fadeOutDuration);
 };
 
@@ -1276,6 +1297,9 @@ const init = () => {
 
 // ==================== 关键：onMounted 统一预加载调度 ====================
 onMounted(async () => {
+  // 声明 test 组：阻止 audioManager 播放任何全局音乐
+  audioManager.ensureGroup("test");
+
   // 1. 先初始化 Three.js 场景（不加载模型）
   init();
 

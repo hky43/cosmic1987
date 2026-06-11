@@ -30,7 +30,11 @@
     </div>
 
     <!-- 金唱片：定位在剪影中心 -->
-    <div class="record-wrapper" :class="{ 'is-dropping': isDropping }">
+    <div
+      ref="recordWrapperRef"
+      class="record-wrapper"
+      :class="{ 'is-dropping': isDropping }"
+    >
       <img
         :src="asset('images/decorations/金唱片.png')"
         class="golden-record"
@@ -41,7 +45,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { asset } from "@/utils/asset";
 
 const emit = defineEmits(["complete", "prepareComplete"]);
@@ -51,6 +55,12 @@ const visible = ref(!isNavigatedBack);
 const progress = ref(0);
 const isDropping = ref(false);
 const isFadingOut = ref(false);
+const recordWrapperRef = ref(null);
+
+// 用于在组件卸载时清除所有待执行计时器
+let cleanupTimer1 = null;
+let cleanupRaf = null;
+let onTransitionEnd = null; // transitionend 回调引用，用于卸载时移除
 
 const percentDisplay = computed(() => {
   return String(Math.floor(progress.value)).padStart(2, "0") + "%";
@@ -95,33 +105,54 @@ const startLoading = () => {
     progress.value = p;
 
     if (p < 100) {
-      requestAnimationFrame(tick);
+      cleanupRaf = requestAnimationFrame(tick);
     } else {
       /* ---- 进度达 100%，进入过渡阶段 ---- */
-      // 步骤 1：延迟 250ms 后，金唱片下落 + 加载画面开始淡出（同时进行）
-      setTimeout(() => {
+      // 步骤 1：金唱片下落 + 加载画面淡出
+      cleanupTimer1 = setTimeout(() => {
+        if (!visible.value) return;
         isDropping.value = true;
-        isFadingOut.value = true;
-        // 提前通知 HomePage 开始在背后渲染主页（此时加载画面正在淡出）
+        // 硬切：不设 isFadingOut，唱片掉完直接消失进入主页
         emit("prepareComplete");
 
-        // 步骤 2：淡出完成后（0.8s），完全移除加载画面
-        setTimeout(() => {
-          visible.value = false;
-          localStorage.setItem("hasVisitedHome", "true");
-          nextTick(() => {
-            emit("complete");
-          });
-        }, 800);
-      }, 250);
+        // 步骤 2：监听金唱片 transitionend → 真正掉出屏幕后再切页（不再用硬编码计时器）
+        const recordEl = recordWrapperRef.value;
+        if (recordEl) {
+          onTransitionEnd = () => {
+            recordEl.removeEventListener("transitionend", onTransitionEnd);
+            onTransitionEnd = null;
+            if (!visible.value) return;
+            visible.value = false;
+            localStorage.setItem("hasVisitedHome", "true");
+            nextTick(() => emit("complete"));
+          };
+          recordEl.addEventListener("transitionend", onTransitionEnd);
+        }
+      }, 10);
     }
   };
 
-  requestAnimationFrame(tick);
+  cleanupRaf = requestAnimationFrame(tick);
 };
 
 onMounted(() => {
   startLoading();
+});
+
+onBeforeUnmount(() => {
+  // 清除所有待执行的计时器和事件监听
+  if (cleanupTimer1) clearTimeout(cleanupTimer1);
+  if (cleanupRaf) cancelAnimationFrame(cleanupRaf);
+  if (onTransitionEnd && recordWrapperRef.value) {
+    recordWrapperRef.value.removeEventListener(
+      "transitionend",
+      onTransitionEnd,
+    );
+  }
+  cleanupTimer1 = null;
+  cleanupRaf = null;
+  onTransitionEnd = null;
+  console.log("[HomePageLoading] 组件卸载，已清除所有待执行计时器");
 });
 </script>
 

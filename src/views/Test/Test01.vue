@@ -48,6 +48,7 @@ const stopAudio = () => {
 };
 
 onMounted(() => {
+  audioManager.ensureGroup("test");
   window.addEventListener("keydown", handleKeydown);
 });
 

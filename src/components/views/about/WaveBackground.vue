@@ -3,7 +3,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, watch } from "vue";
+
+const props = defineProps({
+  hidden: { type: Boolean, default: false },
+});
 
 const cvs = ref(null);
 let ctx,
@@ -90,16 +94,41 @@ function resize() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
+// 【新增】监听 hidden prop，控制动画暂停/恢复
+watch(
+  () => props.hidden,
+  (newVal) => {
+    if (newVal) {
+      // 隐藏：暂停动画
+      if (animId) {
+        cancelAnimationFrame(animId);
+        animId = null;
+      }
+    } else {
+      // 显示：恢复动画
+      if (!animId) {
+        draw();
+      }
+    }
+  },
+);
+
 onMounted(() => {
   ctx = cvs.value.getContext("2d");
   resize();
   window.addEventListener("resize", resize);
-  draw();
+  // 仅在未隐藏时启动动画
+  if (!props.hidden) {
+    draw();
+  }
 });
 
 onUnmounted(() => {
   window.removeEventListener("resize", resize);
-  cancelAnimationFrame(animId);
+  if (animId) {
+    cancelAnimationFrame(animId);
+    animId = null;
+  }
 });
 </script>
 

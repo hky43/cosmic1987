@@ -33,6 +33,15 @@
           <span class="play-icon">▶</span>
           <span class="play-text">开始播放</span>
         </button>
+
+        <button
+          class="start-btn info-start-btn"
+          @click="showCreditsFromStart"
+          title="技术说明与借物表"
+        >
+          <span class="play-icon">ℹ</span>
+          <span class="play-text">技术说明</span>
+        </button>
       </div>
     </div>
 
@@ -49,6 +58,151 @@
 
     <!-- ========== 淡出覆盖层（动画结束时显示）========== -->
     <div v-if="showFadeOverlay" class="overlay fade-overlay"></div>
+
+    <!-- ========== 结束介绍页面 / 借物表（阶段5）========== -->
+    <div
+      v-if="phase === 'credits'"
+      class="overlay credits-overlay"
+      tabindex="0"
+      @keydown="handleCreditsKeydown"
+      ref="creditsEl"
+    >
+      <div class="credits-content">
+        <div class="credits-header">
+          <h1 class="credits-title">妄想天使</h1>
+          <p class="credits-subtitle">MMD 技术演示 · 借物表</p>
+        </div>
+
+        <!-- 技术栈 -->
+        <div class="credits-card">
+          <div class="credits-card-head">
+            <span class="credits-card-icon">🛠</span>
+            <h2>技术实现</h2>
+          </div>
+          <ul class="credits-list">
+            <li>
+              <span class="credits-tag">渲染引擎</span>
+              <a
+                href="https://www.babylonjs.com/"
+                target="_blank"
+                rel="noopener"
+                >Babylon.js 7.x</a
+              >
+            </li>
+            <li>
+              <span class="credits-tag">MMD 运行时</span>
+              <a
+                href="https://github.com/BabylonJS/babylon-mmd"
+                target="_blank"
+                rel="noopener"
+                >babylon-mmd</a
+              >
+            </li>
+            <li>
+              <span class="credits-tag">前端框架</span>
+              <a href="https://vuejs.org/" target="_blank" rel="noopener"
+                >Vue 3 + Vite</a
+              >
+            </li>
+            <li>
+              <span class="credits-tag">物理引擎</span>
+              <a
+                href="https://github.com/kripken/ammo.js/"
+                target="_blank"
+                rel="noopener"
+                >Ammo.js (WASM)</a
+              >
+            </li>
+            <li>
+              <span class="credits-tag">动作数据</span>
+              <span>VMD (Vocaloid Motion Data)</span>
+            </li>
+            <li>
+              <span class="credits-tag">模型格式</span>
+              <span>PMX (Polygon Model eXtended)</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- 借物表 -->
+        <div class="credits-card">
+          <div class="credits-card-head">
+            <span class="credits-card-icon">📋</span>
+            <h2>借物表 / Credits</h2>
+          </div>
+          <ul class="credits-list">
+            <li>
+              <span class="credits-tag">模型</span>
+              <span>miHoYo/橘子/观海子</span>
+            </li>
+            <li>
+              <span class="credits-tag">动作</span>
+              <span>ケイ</span>
+            </li>
+            <li>
+              <span class="credits-tag">镜头</span>
+              <span
+                >千月其一（<a
+                  href="https://www.bilibili.com/video/BV1ueNczmEVj/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >BV1ueNczmEVj</a
+                >）</span
+              >
+            </li>
+            <li>
+              <span class="credits-tag">音频</span>
+              <span
+                >ReDreaming Angel 复梦天使（<a
+                  href="https://www.bilibili.com/video/BV11UBfBMEfQ/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >BV11UBfBMEfQ</a
+                >）</span
+              >
+            </li>
+            <li>
+              <span class="credits-tag">场景视频</span>
+              <span>ReDreaming Angel 复梦天使</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- 技术文档 -->
+        <div class="credits-card">
+          <div class="credits-card-head">
+            <span class="credits-card-icon">📚</span>
+            <h2>相关链接</h2>
+          </div>
+          <div class="credits-links">
+            <a href="https://doc.babylonjs.com/" target="_blank" rel="noopener"
+              >Babylon.js 文档</a
+            >
+            <a
+              href="https://github.com/BabylonJS/babylon-mmd"
+              target="_blank"
+              rel="noopener"
+              >babylon-mmd</a
+            >
+            <a
+              href="https://github.com/kripken/ammo.js/"
+              target="_blank"
+              rel="noopener"
+              >Ammo.js(失败)</a
+            >
+            <a href="https://learnmmd.com/" target="_blank" rel="noopener"
+              >Learn MMD</a
+            >
+          </div>
+        </div>
+
+        <!-- 按键提示 -->
+        <div class="credits-hint">
+          <span class="key-badge">任意键</span>
+          <span class="credits-hint-text">按下返回开始界面</span>
+        </div>
+      </div>
+    </div>
 
     <!-- ========== 控制栏（阶段4 显示）========== -->
     <div
@@ -124,6 +278,8 @@ import {
   StandardMaterial,
   ShadowGenerator,
   VideoTexture,
+  MirrorTexture,
+  Plane,
   Mesh,
   Texture,
 } from "@babylonjs/core";
@@ -184,6 +340,7 @@ const CONFIG = {
   videoBgWidth: 85,
   videoBgHeight: 50,
   videoBgZ: 100,
+  videoBgY: 40,
 
   // ===== 场景配置 =====
   bgColor: new Color4(1, 1, 1, 1),
@@ -195,6 +352,14 @@ const CONFIG = {
   shadowMinZ: 0.5,
   shadowMaxZ: 50,
   shadowBias: 0.001,
+
+  // ===== 模型本影（自阴影）配置 =====
+  selfShadowMapSize: 1024,
+  selfShadowMinZ: 0.1,
+  selfShadowMaxZ: 15,
+  selfShadowBias: 0.005,
+  selfShadowDarkness: 0.3,
+
   cameraAlpha: -Math.PI / 2,
   cameraBeta: Math.PI / 2.6,
   cameraRadius: 35,
@@ -207,8 +372,8 @@ const CONFIG = {
 // 状态机（使用单一 phase 替代多个布尔值）
 // ============================================
 // 'loading' → 'ready' → 'intro' → 'playing' | 'paused'
-//            ↓
-//          'error'
+//            ↓                          ↓
+//          'error'                   'credits' → 'ready'
 const phase = ref("loading");
 const isPlaying = ref(false);
 const isLooping = ref(false); // 默认关闭循环
@@ -218,6 +383,7 @@ const loadError = ref("");
 const cameraMode = ref("motion");
 const videoBgEnabled = ref(true);
 const showFadeOverlay = ref(false); // 淡出覆盖层
+const creditsEl = ref(null); // 借物表 DOM 引用
 
 // ============================================
 // DOM 引用
@@ -233,6 +399,7 @@ let scene = null;
 let mmdRuntime = null;
 let renderLoop = null;
 let shadowGenerator = null;
+let selfShadowGenerator = null;
 let dirLight = null;
 let groundMesh = null;
 let arcCamera = null;
@@ -268,11 +435,6 @@ function initEngine() {
 function ensurePmxLoaderRegistered() {
   if (!SceneLoader.IsPluginForExtensionAvailable(".pmx")) {
     const materialBuilder = new MmdStandardMaterialBuilder();
-    // 【先注释掉】materialBuilder.afterBuild 回调可能导致某些材质加载问题
-    // materialBuilder.afterBuild = (material, context) => {
-    //   material.receiveShadows = true;
-    //   material.ambientColor = new Color3(0.1, 0.1, 0.1);
-    // };
     const pmxLoader = new PmxLoader();
     pmxLoader.materialBuilder = materialBuilder;
     SceneLoader.RegisterPlugin(pmxLoader);
@@ -303,10 +465,36 @@ function setupLightsWithShadows() {
   shadowGenerator.normalBias = 0.02;
   shadowGenerator.darkness = 0.5;
   shadowGenerator.usePoissonSampling = true;
+
+  // ===== 模型本影生成器：近距离高精度 =====
+  const selfDirLight = new DirectionalLight(
+    "selfDirLight",
+    CONFIG.dirLightDirection,
+    scene,
+  );
+  selfDirLight.intensity = CONFIG.dirLightIntensity;
+  selfDirLight.diffuse = new Color3(1.0, 0.95, 0.9);
+  selfDirLight.specular = new Color3(0.8, 0.8, 0.8);
+  selfDirLight.shadowEnabled = true;
+  selfDirLight.position = new Vector3(5, 15, 5);
+
+  selfShadowGenerator = new ShadowGenerator(
+    CONFIG.selfShadowMapSize,
+    selfDirLight,
+  );
+  selfShadowGenerator.shadowMinZ = CONFIG.selfShadowMinZ;
+  selfShadowGenerator.shadowMaxZ = CONFIG.selfShadowMaxZ;
+  selfShadowGenerator.bias = CONFIG.selfShadowBias;
+  selfShadowGenerator.normalBias = 0.02;
+  selfShadowGenerator.darkness = CONFIG.selfShadowDarkness;
+  selfShadowGenerator.useBlurExponentialShadowMap = true;
+  selfShadowGenerator.blurScale = 2;
+  selfShadowGenerator.blurBoxOffset = 1;
+  selfShadowGenerator.forceBackFacesOnly = true;
 }
 
 // ============================================
-// 4. 地面
+// 4. 纯镜面反射地板
 // ============================================
 function setupGround() {
   groundMesh = MeshBuilder.CreateGround(
@@ -315,15 +503,23 @@ function setupGround() {
     scene,
   );
   groundMesh.position.set(0, 0, 0);
+
+  const mirror = new MirrorTexture("mirror", 1024, scene, true);
+  mirror.mirrorPlane = new Plane(0, -1, 0, 0);
+
+  const mirrorMat = new StandardMaterial("mirrorMat", scene);
+  mirrorMat.diffuseColor = new Color3(0, 0, 0);
+  mirrorMat.specularColor = new Color3(0, 0, 0);
+  mirrorMat.emissiveColor = new Color3(0, 0, 0);
+  mirrorMat.reflectionTexture = mirror;
+  mirrorMat.reflectionTexture.level = 1.0;
+
+  groundMesh.material = mirrorMat;
   groundMesh.receiveShadows = true;
-  const mat = new StandardMaterial("groundMaterial", scene);
-  mat.diffuseColor = new Color3(0.88, 0.88, 0.9);
-  mat.specularColor = new Color3(0.02, 0.02, 0.02);
-  mat.specularPower = 10;
-  mat.ambientColor = new Color3(0.12, 0.12, 0.12);
-  groundMesh.material = mat;
-  groundMesh.freezeWorldMatrix();
-  mat.freeze();
+
+  window.__groundMirror = mirror;
+
+  console.log("✅ 镜面反射地板初始化完成");
 }
 
 // ============================================
@@ -341,7 +537,7 @@ function setupVideoBackground() {
       scene,
     );
 
-    videoBgMesh.position.set(0, CONFIG.videoBgHeight / 2 - 2, CONFIG.videoBgZ);
+    videoBgMesh.position.set(0, CONFIG.videoBgY, CONFIG.videoBgZ);
     videoBgMesh.rotation.y = Math.PI;
     videoBgMesh.scaling.x = -1; // 水平翻转视频画面
 
@@ -407,7 +603,6 @@ async function loadMmdResources() {
     ensurePmxLoaderRegistered();
 
     console.log("🔧 创建 MmdRuntime...");
-    // 如果 scene 已经启用物理引擎，MmdRuntime 会自动复用
     mmdRuntime = new MmdRuntime(scene);
     mmdRuntime.register(scene);
     console.log("✅ MmdRuntime 创建成功");
@@ -437,14 +632,12 @@ async function loadMmdResources() {
         );
         const startTime = Date.now();
 
-        // 【关键修复】添加超时机制，防止无限卡住
         const loadPromise = SceneLoader.ImportMeshAsync(
           "",
           modelConfig.modelDir,
           modelConfig.modelFile,
           scene,
           (e) => {
-            // 【修复】即使 lengthComputable 为 false，也更新进度
             if (e.lengthComputable) {
               const percent = Math.round((e.loaded / e.total) * 100);
               loadProgress.value = 10 + i * 25 + Math.round(percent * 0.2);
@@ -453,7 +646,6 @@ async function loadMmdResources() {
                 `[ModelLoader] 进度: ${e.loaded}/${e.total} (${percent}%)`,
               );
             } else {
-              // 未知大小时，显示已下载字节数
               const mb = (e.loaded / 1024 / 1024).toFixed(1);
               loadDetail.value = `正在加载模型 ${i + 1}/${CONFIG.models.length}: ${modelConfig.name} (${mb} MB)`;
               console.log(`[ModelLoader] 已下载: ${mb} MB`);
@@ -461,7 +653,6 @@ async function loadMmdResources() {
           },
         );
 
-        // 30秒超时
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(
             () =>
@@ -490,6 +681,8 @@ async function loadMmdResources() {
         allMeshes.forEach((child) => {
           child.receiveShadows = true;
           if (shadowGenerator) shadowGenerator.addShadowCaster(child, false);
+          if (selfShadowGenerator)
+            selfShadowGenerator.addShadowCaster(child, true);
         });
 
         const mmdModel = mmdRuntime.createMmdModel(mesh);
@@ -528,6 +721,17 @@ async function loadMmdResources() {
 
     window.__mmdRuntime = mmdRuntime;
     window.__mmdModels = mmdModels;
+
+    if (window.__groundMirror) {
+      mmdModels.forEach(({ mesh }) => {
+        const allMeshes = mesh.getChildMeshes(true);
+        allMeshes.push(mesh);
+        allMeshes.forEach((child) => {
+          window.__groundMirror.renderList.push(child);
+        });
+      });
+      console.log("✅ 模型已加入镜面反射列表");
+    }
   } catch (err) {
     console.error("❌ 加载失败:", err);
     throw err;
@@ -544,10 +748,8 @@ function startRenderLoop() {
       const duration = mmdRuntime.animationFrameTimeDuration || 0;
       if (duration > 0 && currentTime >= duration - 0.1) {
         if (isLooping.value) {
-          // 循环模式：重新开始
           mmdRuntime.seekAnimation(0);
         } else {
-          // 非循环模式：淡出返回启动界面
           handleAnimationEnd();
         }
       }
@@ -557,14 +759,13 @@ function startRenderLoop() {
 }
 
 // ============================================
-// 动画结束处理（非循环模式）
+// 动画结束处理（非循环模式）→ 进入借物表页面
 // ============================================
 async function handleAnimationEnd() {
   if (phase.value !== "playing") return;
 
-  console.log("🎬 动画播放结束，开始淡出...");
+  console.log("🎬 动画播放结束，进入借物表页面...");
 
-  // 停止动画和音频
   isPlaying.value = false;
   if (mmdRuntime) {
     mmdRuntime.pauseAnimation();
@@ -576,41 +777,84 @@ async function handleAnimationEnd() {
     videoBgTexture.video.pause();
   }
 
-  // 显示淡出层
   showFadeOverlay.value = true;
-
-  // 等待淡出动画完成（1秒）
   await new Promise((resolve) => setTimeout(resolve, 1000));
-
-  // 重置状态回到启动界面
-  resetToReadyState();
-}
-
-// ============================================
-// 重置到启动界面状态
-// ============================================
-function resetToReadyState() {
-  // 隐藏淡出层
   showFadeOverlay.value = false;
 
-  // 隐藏视频背景
   if (videoBgMesh) {
     videoBgMesh.isVisible = false;
   }
 
-  // 重置动画到开头
+  phase.value = "credits";
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  if (creditsEl.value) {
+    creditsEl.value.focus();
+  }
+
+  console.log("✅ 已进入借物表页面，等待用户按键...");
+}
+
+// ============================================
+// 重置到启动界面状态（从借物表返回）
+// ============================================
+function resetToReadyState() {
+  showFadeOverlay.value = false;
+
+  if (videoBgMesh) {
+    videoBgMesh.isVisible = false;
+  }
+
   if (mmdRuntime) {
     mmdRuntime.seekAnimation(0);
   }
 
-  // 重置背景视频
   if (videoBgTexture && videoBgTexture.video) {
     videoBgTexture.video.currentTime = 0;
   }
 
-  // 切换到启动界面阶段
   phase.value = "ready";
   console.log("✅ 已返回启动界面");
+}
+
+// ============================================
+// 借物表页面按键处理
+// ============================================
+function handleCreditsKeydown(e) {
+  if (
+    e.key === "Shift" ||
+    e.key === "Control" ||
+    e.key === "Alt" ||
+    e.key === "Meta" ||
+    e.key === "CapsLock" ||
+    e.key === "NumLock" ||
+    e.key === "ScrollLock" ||
+    e.key === "Fn"
+  ) {
+    return;
+  }
+  e.preventDefault();
+  resetToReadyState();
+}
+
+// ============================================
+// 从启动界面进入借物表
+// ============================================
+async function showCreditsFromStart() {
+  if (phase.value !== "ready") return;
+
+  console.log("📖 从启动界面进入借物表");
+
+  showFadeOverlay.value = true;
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  showFadeOverlay.value = false;
+  phase.value = "credits";
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  if (creditsEl.value) {
+    creditsEl.value.focus();
+  }
 }
 
 function handleResize() {
@@ -626,7 +870,6 @@ async function startPlayback() {
   console.log("▶️ 用户点击开始，进入开场视频阶段");
   phase.value = "intro";
 
-  // 等待 DOM 更新后再操作视频元素
   await new Promise((resolve) => setTimeout(resolve, 50));
 
   const videoEl = introVideoEl.value;
@@ -640,7 +883,6 @@ async function startPlayback() {
     await videoEl.play();
     console.log("🎬 开场视频播放中...");
 
-    // 监听视频自然结束事件，播放完毕后再切换
     videoEl.addEventListener(
       "ended",
       async () => {
@@ -660,7 +902,6 @@ async function startPlayback() {
 async function enterPlayingPhase() {
   console.log("🎬 硬切到模型场景");
 
-  // 停止开场视频并保持在最后一帧，防止闪回第一帧
   const videoEl = introVideoEl.value;
   if (videoEl) {
     videoEl.pause();
@@ -674,7 +915,6 @@ async function enterPlayingPhase() {
     }
   }
 
-  // 显示 Babylon 视频背景
   if (videoBgMesh) {
     videoBgMesh.isVisible = true;
   }
@@ -683,18 +923,15 @@ async function enterPlayingPhase() {
     videoBgTexture.video.play();
   }
 
-  // 启动 MMD 动画
   if (mmdRuntime) {
     mmdRuntime.playAnimation();
     isPlaying.value = true;
   }
 
-  // 启动音频
   if (audioPlayer) {
     audioPlayer.play();
   }
 
-  // 切换到播放阶段
   phase.value = "playing";
 
   console.log("✅ 模型动画已开始，视频背景已激活");
@@ -757,7 +994,6 @@ function reload() {
   loadError.value = "";
   isPlaying.value = false;
 
-  // 清理资源
   if (videoBgTexture) {
     try {
       videoBgTexture.dispose();
@@ -794,6 +1030,7 @@ function reload() {
   }
 
   shadowGenerator = null;
+  selfShadowGenerator = null;
   dirLight = null;
   groundMesh = null;
   arcCamera = null;
@@ -801,6 +1038,11 @@ function reload() {
   mmdCameraHandle = null;
   audioPlayer = null;
   mmdModels.length = 0;
+
+  if (window.__groundMirror) {
+    window.__groundMirror.dispose();
+    window.__groundMirror = null;
+  }
 
   initAndLoad();
 }
@@ -810,22 +1052,17 @@ function reload() {
 // ============================================
 async function loadAmmo() {
   return new Promise(async (resolve, reject) => {
-    // 如果已经初始化过，直接复用实例
     if (window.__ammoInstance) {
       resolve(window.__ammoInstance);
       return;
     }
 
-    // 获取基础路径（用于 GitHub Pages 部署）
     const basePath = import.meta.env.BASE_URL || "/";
     console.log(`[Ammo] 基础路径: ${basePath}`);
 
-    // 如果 Ammo 已通过 HTML 中的 script 标签预加载（window.Ammo 已定义），
-    // 则直接调用 Ammo() 初始化，避免重复加载脚本
     if (typeof window.Ammo === "function") {
       console.log("[Ammo] 检测到预加载的 Ammo，直接初始化...");
 
-      // 探测 WASM 文件名以配置正确的路径
       const possibleNames = ["ammo.wasm.wasm", "ammo.wasm"];
       let wasmFileName = "ammo.wasm.wasm";
       for (const name of possibleNames) {
@@ -837,12 +1074,9 @@ async function loadAmmo() {
             wasmFileName = name;
             break;
           }
-        } catch (e) {
-          // 继续尝试
-        }
+        } catch (e) {}
       }
 
-      // 配置 Module.locateFile（必须在 Ammo() 调用前设置）
       window.Module = window.Module || {};
       window.Module.locateFile = (file) => {
         if (file.endsWith(".wasm")) {
@@ -862,9 +1096,6 @@ async function loadAmmo() {
       return;
     }
 
-    // === 以下为动态加载逻辑（Ammo 未预加载时使用）===
-
-    // 探测 public/ammo/ 目录下实际存在的 WASM 文件名
     const possibleNames = ["ammo.wasm.wasm", "ammo.wasm"];
     let wasmFileName = null;
     for (const name of possibleNames) {
@@ -874,9 +1105,7 @@ async function loadAmmo() {
           wasmFileName = name;
           break;
         }
-      } catch (e) {
-        // fetch 失败继续尝试下一个
-      }
+      } catch (e) {}
     }
 
     if (!wasmFileName) {
@@ -890,7 +1119,6 @@ async function loadAmmo() {
 
     console.log(`[Ammo] 检测到 WASM 文件: ${wasmFileName}`);
 
-    // 在加载 JS 胶水代码前，先配置 Module.locateFile
     window.Module = window.Module || {};
     window.Module.locateFile = (file) => {
       if (file.endsWith(".wasm")) {
@@ -899,7 +1127,6 @@ async function loadAmmo() {
       return `${basePath}ammo/${file}`;
     };
 
-    // 动态创建 script 标签加载胶水代码
     const script = document.createElement("script");
     script.src = `${basePath}ammo/ammo.wasm.js`;
     script.type = "text/javascript";
@@ -908,15 +1135,13 @@ async function loadAmmo() {
     script.onload = () => {
       console.log("[Ammo] JS 胶水代码加载完成，等待 WASM 初始化...");
 
-      // 轮询检查 window.Ammo 是否可用
       let attempts = 0;
-      const maxAttempts = 200; // 10秒超时
+      const maxAttempts = 200;
 
       const checkInterval = setInterval(() => {
         attempts++;
         if (typeof window.Ammo === "function") {
           clearInterval(checkInterval);
-          // 调用 Ammo() 初始化 WASM，返回 Promise
           window
             .Ammo()
             .then((instance) => {
@@ -961,10 +1186,8 @@ async function initAndLoad() {
     console.log("🚀 开始初始化...");
     phase.value = "loading";
 
-    // ========== 1. 创建引擎和场景 ==========
     initEngine();
 
-    // ========== 2. Ammo.js 物理引擎（暂时禁用，后续需要时改为 false）==========
     const SKIP_PHYSICS = true;
 
     if (!SKIP_PHYSICS) {
@@ -993,7 +1216,6 @@ async function initAndLoad() {
     startRenderLoop();
     window.addEventListener("resize", handleResize);
 
-    // 所有资源就绪，切换到启动界面
     phase.value = "ready";
     console.log("✅ 初始化完成，等待用户点击开始");
   } catch (err) {
@@ -1220,6 +1442,7 @@ onBeforeUnmount(() => {
 }
 
 .start-content {
+  position: relative;
   text-align: center;
   color: #303040;
   padding: 40px 60px;
@@ -1272,6 +1495,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: all 0.3s ease;
   box-shadow: 0 6px 20px rgba(255, 107, 157, 0.4);
+  margin: 0 6px;
 }
 
 .start-btn:hover {
@@ -1281,6 +1505,15 @@ onBeforeUnmount(() => {
 
 .start-btn:active {
   transform: translateY(0);
+}
+
+.info-start-btn {
+  background: linear-gradient(135deg, #6b9fff, #8ec7ff);
+  box-shadow: 0 6px 20px rgba(107, 159, 255, 0.4);
+}
+
+.info-start-btn:hover {
+  box-shadow: 0 10px 30px rgba(107, 159, 255, 0.5);
 }
 
 .play-icon {
@@ -1383,12 +1616,206 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-@keyframes fadeIn {
+/* ============================================
+   结束介绍页面 / 借物表（z-index: 50）
+   ============================================ */
+.credits-overlay {
+  z-index: 50;
+  background: rgba(250, 250, 252, 0.97);
+  backdrop-filter: blur(20px);
+  overflow-y: auto;
+  padding: 24px 20px;
+  outline: none;
+  display: block;
+  animation: creditsSlideUp 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes creditsSlideUp {
   from {
     opacity: 0;
+    transform: translateY(50px);
   }
   to {
     opacity: 1;
+    transform: translateY(0);
   }
+}
+
+.credits-content {
+  max-width: 520px;
+  width: 100%;
+  margin: 0 auto;
+  color: #2a2a35;
+}
+
+.credits-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.credits-title {
+  font-size: 26px;
+  font-weight: 800;
+  margin-bottom: 4px;
+  background: linear-gradient(135deg, #ff6b9d, #c084fc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 1px;
+}
+
+.credits-subtitle {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.35);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+/* 卡片容器 */
+.credits-card {
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  padding: 14px 18px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.credits-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.05);
+}
+
+.credits-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.credits-card-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.credits-card h2 {
+  font-size: 14px;
+  font-weight: 700;
+  color: #303040;
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+/* 列表 */
+.credits-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.credits-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: rgba(0, 0, 0, 0.65);
+  padding: 1px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.credits-list li:last-child {
+  border-bottom: none;
+}
+
+.credits-tag {
+  display: inline-block;
+  min-width: 64px;
+  padding: 2px 6px;
+  background: rgba(255, 107, 157, 0.08);
+  border: 1px solid rgba(255, 107, 157, 0.15);
+  border-radius: 5px;
+  color: #ff6b9d;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-align: center;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+
+.credits-list a {
+  color: #ff6b9d;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255, 107, 157, 0.25);
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.credits-list a:hover {
+  border-color: #ff6b9d;
+  color: #e05085;
+}
+
+/* 链接按钮组 */
+.credits-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.credits-links a {
+  display: inline-block;
+  padding: 8px 16px;
+  background: rgba(255, 107, 157, 0.06);
+  border: 1px solid rgba(255, 107, 157, 0.18);
+  border-radius: 20px;
+  color: #ff6b9d;
+  font-size: 12.5px;
+  text-decoration: none;
+  transition: all 0.25s ease;
+  font-weight: 500;
+}
+
+.credits-links a:hover {
+  background: rgba(255, 107, 157, 0.14);
+  border-color: rgba(255, 107, 157, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 107, 157, 0.1);
+}
+
+/* 底部按键提示 */
+.credits-hint {
+  text-align: center;
+  margin-top: 18px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  animation: fadeIn 1s ease 0.3s both;
+}
+
+.key-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #303040;
+  font-family: "Courier New", monospace;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.08);
+}
+
+.credits-hint-text {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.4);
+  letter-spacing: 1px;
 }
 </style>

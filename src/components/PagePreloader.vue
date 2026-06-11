@@ -128,8 +128,12 @@ const hideLoading = () => {
   setTimeout(() => {
     loading.value = false;
     console.log("[PagePreloader] 加载完成，显示页面:", props.title);
+    // emit 事件：通知子页面内容已可见，可重新计算布局/尺寸
+    emit("content-visible");
   }, 150);
 };
+
+const emit = defineEmits(["content-visible"]);
 
 onMounted(async () => {
   if (shouldSkipAnimation.value) {
@@ -151,6 +155,7 @@ onMounted(async () => {
         clearInterval(checkInterval);
         loading.value = false;
         console.log("[PagePreloader] 子页面就绪，显示内容");
+        emit("content-visible");
       }
     }, 100);
 
@@ -159,6 +164,7 @@ onMounted(async () => {
       if (loading.value) {
         console.warn("[PagePreloader] 超时 (skip模式)，强制显示");
         loading.value = false;
+        emit("content-visible");
       }
     }, MAX_WAIT_MS);
 

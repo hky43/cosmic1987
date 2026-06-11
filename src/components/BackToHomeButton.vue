@@ -19,6 +19,9 @@ const handleClick = () => {
   sessionStorage.removeItem("currentThemeMusic");
   sessionStorage.removeItem("currentThemeIndex");
 
+  // 【修复】清除首页跳过加载标记，确保返回首页时显示加载动画
+  sessionStorage.removeItem("navigatedToHome");
+
   // 先恢复主题音乐模式（如果有的话）
   audioManager.restoreHomeMusic();
 

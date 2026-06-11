@@ -83,9 +83,11 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutlinePass } from "three/addons/postprocessing/OutlinePass.js"; // 【新增】雕像描边
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js"; // gamma 校正
 import ClothSimulation from "../../components/ClothSimulation.vue";
 import WhiteOverlay from "../../components/views/home/WhiteOverlay.vue";
 import { asset } from "@/utils/asset";
+import audioManager from "../../utils/audioManager";
 
 const router = useRouter();
 const showWhiteOverlay = ref(false);
@@ -116,6 +118,7 @@ let composer, renderPassBase;
 let halftonePass, woodcutPass, pixelatePass;
 let asciiPass;
 let outlinePass; // 【新增】雕像描边 Pass
+let outputPass; // gamma 校正 Pass
 
 let isDragging = false;
 let previousMousePosition = { x: 0, y: 0 };
@@ -173,9 +176,9 @@ const ShaderCommon = `
 // ========== 【修改】ASCII 字符纹理生成：更大更清晰 ==========
 const createAsciiTexture = () => {
   // 从亮到暗排列：空格(最亮/留白) → @(最暗/最密)
-  const chars = " .,:;i1tfLCG08@";
-  const charW = 32;
-  const charH = 32;
+  const chars = " .,:;/i1tfLCG08@%";
+  const charW = 50;
+  const charH = 50;
   const canvas = document.createElement("canvas");
   canvas.width = chars.length * charW;
   canvas.height = charH;
@@ -185,7 +188,7 @@ const createAsciiTexture = () => {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "white";
-  ctx.font = `bold ${charH - 4}px "Courier New", monospace`;
+  ctx.font = `bold ${charH - 6}px "Courier New", monospace`;
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
 
@@ -206,7 +209,7 @@ const AsciiShader = {
     resolution: {
       value: new THREE.Vector2(window.innerWidth, window.innerHeight),
     },
-    charSize: { value: 8.0 }, // 字符块大小
+    charSize: { value: 12.0 }, // 字符块大小
     charTexture: { value: null }, // 字符图集
     charCount: { value: 15.0 },
   },
@@ -543,14 +546,17 @@ const initScene = () => {
     camera,
   );
   // 加宽描边参数
-  outlinePass.edgeStrength = 3.0; // 描边强度
+  outlinePass.edgeStrength = 20.0; // 描边强度
   outlinePass.edgeGlow = 0.0; // 0 = 关闭发光晕染
-  outlinePass.edgeThickness = 2.5; // ← 加宽：从 1.0 改为 2.5
+  outlinePass.edgeThickness = 10; // ← 加宽：从 1.0 改为 2.5
   outlinePass.pulsePeriod = 0; // 关闭呼吸动画
-  outlinePass.visibleEdgeColor.set(0xff6600); // 可见轮廓橙红色
-  outlinePass.hiddenEdgeColor.set(0x000000); // 被遮挡轮廓黑色
+  outlinePass.visibleEdgeColor.set(0xff0000); // 可见轮廓橙黑色
+  outlinePass.hiddenEdgeColor.set(0xffffff); // 轮廓黑色
   outlinePass.enabled = false;
   composer.addPass(outlinePass);
+
+  outputPass = new OutputPass();
+  composer.addPass(outputPass);
 
   updateFilterState();
 
@@ -720,14 +726,6 @@ const updateFilterState = () => {
 };
 
 const render = () => {
-  // 【修改】雕像描边模式下：正常渲染 + 单独描边，不走其他滤镜 composer
-  if (isFilterEnabled.value && currentFilter.value === "outline") {
-    renderer.render(scene, camera); // 先正常渲染原画面
-    composer.render(); // 再叠加纯描边（OutlinePass 会读取深度缓冲）
-    return;
-  }
-
-  // 原有逻辑不变
   if (isFilterEnabled.value) {
     composer.render();
   } else {
@@ -867,6 +865,9 @@ const stopRendering = () => {
 };
 
 onMounted(() => {
+  // 声明 test 组：阻止 audioManager 播放任何全局音乐
+  audioManager.ensureGroup("test");
+
   // 添加键盘事件监听
   window.addEventListener("keydown", handleKeydown);
 

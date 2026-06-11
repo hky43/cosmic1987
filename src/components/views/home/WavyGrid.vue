@@ -5,7 +5,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from "vue";
+import { ref, onMounted, onUnmounted, watch, inject, watchEffect } from "vue";
 
 /* ==================== Props ==================== */
 const props = defineProps({
@@ -407,6 +407,21 @@ watch(
     }
   },
 );
+/* ================================================================= */
+
+/* ==================== 【新增】HomePage keep-alive 暂停/恢复 ==================== */
+const pageActive = inject("isPageActive", ref(true));
+watchEffect(() => {
+  if (!pageActive.value) {
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  } else if (!props.paused && !rafId) {
+    lastTime = 0;
+    rafId = requestAnimationFrame(tick);
+  }
+});
 /* ================================================================= */
 
 /* ==================== 生命周期 ==================== */

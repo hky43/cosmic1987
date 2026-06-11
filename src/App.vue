@@ -36,7 +36,6 @@ let routeLoaderTimer = null;
 const MIN_LOADER_DURATION = 700;
 
 const startRouteLoader = () => {
-  if (!isInitialized) return;
   if (routeLoaderTimer) clearTimeout(routeLoaderTimer);
   routeLoaderTimer = null;
   showRouteLoader.value = true;
@@ -70,7 +69,7 @@ const handleLayoutChange = (event) => {
 const forceCleanOverlays = () => {
   console.log("[App] 强制清理残留遮罩");
 
-  // 1. 清理已知类名的遮罩元素
+  // 1. 清理已知类名的遮罩元素（不含 .loading-screen，它是 Vue 管理的组件，不应外部删除）
   const knownSelectors = [
     ".global-white-mask",
     ".transition-mask",
@@ -79,7 +78,6 @@ const forceCleanOverlays = () => {
     ".white-fade-leave-active",
     ".white-fade-enter-from",
     ".white-fade-leave-to",
-    ".loading-screen",
   ];
   knownSelectors.forEach((selector) => {
     document.querySelectorAll(selector).forEach((el) => {
@@ -106,11 +104,18 @@ const forceCleanOverlays = () => {
       parseInt(style.zIndex) > 100 ||
       style.zIndex === "9999" ||
       style.zIndex === "99999";
+    // 【修复】精确匹配纯白/纯黑不透明遮罩，避免误删正常页面元素
+    // 旧逻辑中 style.background !== "none" 几乎总是 true（background 是完整简写字符串）
+    // 导致任何有背景色的元素都被标记为 blockingBg，引发 Vue DOM 同步错误
     const isBlockingBg =
-      style.backgroundColor.includes("255, 255, 255") ||
-      style.backgroundColor.includes("0, 0, 0") ||
-      style.background !== "none" ||
-      style.backgroundColor !== "transparent";
+      style.backgroundColor === "rgb(255, 255, 255)" ||
+      style.backgroundColor === "rgb(0, 0, 0)" ||
+      style.backgroundColor === "#ffffff" ||
+      style.backgroundColor === "#000000" ||
+      (style.backgroundColor.includes("255, 255, 255") &&
+        style.backgroundColor.includes(", 1)")) ||
+      (style.backgroundColor.includes("0, 0, 0") &&
+        style.backgroundColor.includes(", 1)"));
 
     if (isFixed && isFullScreen && isHighZIndex && isBlockingBg) {
       console.warn(
@@ -126,6 +131,8 @@ const forceCleanOverlays = () => {
   // 3. 重置 body 和 html 被强制修改的样式
   document.body.style.background = "";
   document.body.style.overflow = "";
+  document.body.style.height = "";
+  document.body.style.minHeight = "";
   document.documentElement.style.background = "";
   document.documentElement.style.overflow = "";
 };
@@ -144,15 +151,26 @@ watch(
       if (newPath !== "/") {
         document.body.style.height = "100%";
         document.body.style.overflow = "auto";
+        document.body.style.minHeight = "";
+        document.body.style.position = "";
       }
       document.body.style.background = "";
+      document.documentElement.style.height = "";
+      document.documentElement.style.overflow = "";
+      document.documentElement.style.background = "";
 
-      // 2. 移除所有遮罩
+      // 2. 移除所有遮罩（不含 .loading-screen，它是 Vue 管理的组件）
       const selectors = [
         ".preloader-overlay",
         ".global-white-mask",
         ".transition-loader-active",
         "#native-white-screen.is-active",
+        ".transition-mask",
+        ".white-fade-enter-active",
+        ".white-fade-leave-active",
+        ".white-fade-enter-from",
+        ".white-fade-leave-to",
+        ".fade-overlay",
       ];
       selectors.forEach((sel) => {
         document.querySelectorAll(sel).forEach((el) => {
@@ -194,7 +212,13 @@ onMounted(() => {
   // 路由守卫 - 显示加载动画 + 清理遮罩 + 切换音频
   const unsubscribeRouter = router.beforeEach((to, from, next) => {
     console.log("[App] 路由变化:", from.path, "->", to.path);
-    // 显示路由加载动画
+    // 初始页面加载时不显示 WARP DRIVE（此时由 HomePageLoading 负责加载动画）
+    if (!isInitialized) {
+      isInitialized = true;
+      next();
+      return;
+    }
+    // 后续页面切换：显示路由加载动画
     startRouteLoader();
     // 清理遮罩
     forceCleanOverlays();

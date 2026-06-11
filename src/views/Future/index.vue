@@ -23,15 +23,25 @@
         </div>
       </div>
 
-      <div class="cosmic-title" :class="{ show: showTitle }">
-        <img
-          :src="asset('images/decorations/未完成.png')"
-          class="title-image"
-          style="width: 400px; height: auto; max-width: 80vw"
-          alt="宇宙组曲"
-        />
-        <p class="title-sub">后面的区域以后再来探索吧（未完成）</p>
-        <p class="title-sub">COSMIC SUITE · 1977</p>
+      <div v-if="showScrollContent" class="scroll-overlay">
+        <div class="scroll-inner">
+          <div class="scroll-gif-screen">
+            <img
+              :src="asset('images/decorations/1781014188896.gif')"
+              class="scroll-gif"
+              alt="animated decoration"
+            />
+          </div>
+          <div class="scroll-cosmic-screen">
+            <img
+              :src="asset('images/decorations/未完成.png')"
+              style="width: 400px; height: auto; max-width: 80vw"
+              alt="宇宙组曲"
+            />
+            <p class="title-sub">后面的区域以后再来探索吧（未完成）</p>
+            <p class="title-sub">COSMIC SUITE · 1977</p>
+          </div>
+        </div>
       </div>
 
       <div
@@ -86,6 +96,7 @@ const setPageReady = inject("setPageReady", () => {});
 const canInteract = ref(false);
 const gameStarted = ref(false);
 const showTitle = ref(false);
+const showScrollContent = ref(false);
 
 let scene, camera, renderer, mixer;
 let rafId = null;
@@ -825,6 +836,7 @@ function animate() {
     // 1.5 秒后标题浮现
     if (!showTitle.value && now - cutsceneStartTime > 1500) {
       showTitle.value = true;
+      showScrollContent.value = true;
       console.log("✨ 标题浮现");
     }
 
@@ -897,6 +909,8 @@ function onResize() {
 
 onMounted(() => {
   try {
+    // 声明当前页面属于 'future' 音频组
+    audioManager.ensureGroup("future");
     // 主题音乐模式：不需要从 sessionStorage 恢复，主题音乐会保持播放
     console.log("[Future Page] 主题音乐模式，音乐由 audioManager 管理");
 
@@ -1041,7 +1055,9 @@ onBeforeUnmount(() => {
 }
 
 .canvas-container {
-  opacity: 1;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
 }
 .scene-wrapper::after {
   content: "";
@@ -1065,62 +1081,6 @@ onBeforeUnmount(() => {
   pointer-events: none;
   z-index: 6;
 }
-.canvas-container {
-  width: 100%;
-  height: 100%;
-  cursor: crosshair;
-}
-
-.cosmic-title {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-  z-index: 100;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 3s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.cosmic-title.show {
-  opacity: 1;
-}
-.title-main {
-  font-size: clamp(2.5rem, 6vw, 4.5rem);
-  font-weight: 200;
-  color: #ffd700;
-  letter-spacing: 20px;
-  margin: 0 0 16px 0;
-  text-shadow:
-    0 0 40px rgba(255, 215, 0, 0.6),
-    0 0 80px rgba(255, 180, 60, 0.4),
-    0 0 140px rgba(255, 140, 40, 0.2);
-  animation: titleBreath 4s ease-in-out infinite;
-}
-.title-sub {
-  font-size: clamp(0.8rem, 1.5vw, 1.1rem);
-  color: rgba(255, 237, 225, 0.7);
-  letter-spacing: 8px;
-  margin: 0;
-  font-weight: 300;
-  text-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
-}
-@keyframes titleBreath {
-  0%,
-  100% {
-    opacity: 1;
-    text-shadow:
-      0 0 40px rgba(255, 215, 0, 0.6),
-      0 0 80px rgba(255, 180, 60, 0.4);
-  }
-  50% {
-    opacity: 0.85;
-    text-shadow:
-      0 0 60px rgba(255, 215, 0, 0.8),
-      0 0 120px rgba(255, 180, 60, 0.5),
-      0 0 200px rgba(255, 140, 40, 0.3);
-  }
-}
 
 .crosshair {
   position: fixed;
@@ -1142,6 +1102,15 @@ onBeforeUnmount(() => {
     0 0 8px rgba(255, 255, 255, 0.8),
     0 0 20px rgba(255, 237, 225, 0.6);
   transform: translate(-50%, -50%) scale(1.2);
+}
+
+.title-sub {
+  font-size: clamp(0.8rem, 1.5vw, 1.1rem);
+  color: rgba(255, 237, 225, 0.7);
+  letter-spacing: 8px;
+  margin: 0;
+  font-weight: 300;
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
 }
 
 .start-screen {
@@ -1248,9 +1217,72 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.3);
   font-size: 12px;
   letter-spacing: 1px;
+}
+
+.scroll-overlay {
+  position: fixed;
+  inset: 0;
+  height: 100vh;
+  background: #000;
+  z-index: 100;
+  pointer-events: auto;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 237, 225, 0.2) transparent;
+  -webkit-overflow-scrolling: touch;
+  opacity: 0;
+  animation: scrollOverlayFadeIn 3s forwards;
+}
+.scroll-overlay::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+}
+.scroll-overlay::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-overlay::-webkit-scrollbar-thumb {
+  background: rgba(255, 237, 225, 0.2);
+  border-radius: 3px;
+}
+.scroll-overlay .scroll-inner {
+  width: 100%;
+  min-height: 200vh;
+}
+.scroll-gif-screen {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+.scroll-gif {
+  height: 100vh;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
   pointer-events: none;
   user-select: none;
-  z-index: 10;
+}
+.scroll-cosmic-screen {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  gap: 24px;
+  text-align: center;
+}
+@keyframes scrollOverlayFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 .path-text-overlay {

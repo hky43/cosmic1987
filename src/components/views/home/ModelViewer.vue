@@ -25,6 +25,8 @@ import { asset } from "@/utils/asset";
 const props = defineProps({
   modelPath: { type: String, default: asset("models/头盔.glb") },
   active: { type: Boolean, default: true },
+  scale: { type: Number, default: 0.8 }, // 模型缩放系数
+  posY: { type: Number, default: 0.3 }, // 模型垂直偏移，正=上移，负=下移
 });
 
 const isPageActive = ref(true);
@@ -226,10 +228,10 @@ function init() {
       const center = bbox.getCenter(new THREE.Vector3());
       const size = bbox.getSize(new THREE.Vector3());
       const maxDim = Math.max(size.x, size.y, size.z);
-      const scale = 2.5 / maxDim;
+      const scale = (2.5 / maxDim) * props.scale;
       model.scale.setScalar(scale);
       model.position.sub(center.clone().multiplyScalar(scale));
-      model.position.y += 0.1;
+      model.position.y += props.posY;
 
       model.traverse((child) => {
         if (child.isMesh) {

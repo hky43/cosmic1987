@@ -1,6 +1,6 @@
 <
 <template>
-  <PagePreloader title="宇宙档案">
+  <PagePreloader title="宇宙档案" @content-visible="onContentVisible">
     <div class="cosmic-wall">
       <!-- 画布 -->
       <canvas
@@ -557,11 +557,23 @@ function init() {
 
 function resize() {
   const canvas = canvasRef.value;
+  if (!canvas) return;
   const rect = canvas.getBoundingClientRect();
+  // 【修复】canvas 在 display:none 的父容器中时 rect 为 0，跳过尺寸设置
+  // 等到 PagePreloader 隐藏加载画面后再通过 tryResizeAndDraw() 重新初始化
+  if (rect.width === 0 || rect.height === 0) {
+    console.log(
+      "[CosmicArchive] resize 跳过：canvas 尺寸为 0（可能被 PagePreloader 隐藏）",
+    );
+    return;
+  }
   canvas.width = rect.width;
   canvas.height = rect.height;
   draw(); // 尺寸变化立即重绘，避免白屏
 }
+
+// 标记：canvas 初始化时是否因 v-show 隐藏而跳过了尺寸设置
+let needsLayoutRecalc = false;
 
 /* =========================================
    5. 创建档案数据（加载真实图片并统一尺寸）
@@ -578,8 +590,23 @@ async function createImageData() {
   const gridSlots = Array.from({ length: CONFIG.imgTotal }, (_, i) => i);
   shuffleArray(gridSlots);
 
-  // 计算网格居中偏移
+  // 【修复】如果 canvas 尺寸为 0（被 PagePreloader 隐藏），先推迟布局计算
   const canvas = canvasRef.value;
+  if (!canvas || canvas.width === 0 || canvas.height === 0) {
+    console.log(
+      "[CosmicArchive] createImageData: canvas 尺寸为 0，先加载图片，布局待 canvas 可见后计算",
+    );
+    needsLayoutRecalc = true;
+    // 使用一个临时占位 offset，先加载图片
+    await loadImagesOnly(selectedIndices, gridSlots);
+    // 等 canvas 可见后再计算布局
+    return;
+  }
+
+  // 【修复】先确保 ctx 是最新的（keep-alive 场景下 ctx 可能失效）
+  ctx = canvas.getContext("2d", { alpha: false });
+
+  // 计算网格居中偏移
   const offsetX =
     (canvas.width -
       (CONFIG.rowMax * (CONFIG.imgWidth + CONFIG.imgMargin) -
@@ -591,7 +618,43 @@ async function createImageData() {
         CONFIG.imgMargin)) /
     2;
 
-  // 【优化】并行加载所有图片，速度提升约 8-10 倍
+  await loadImagesWithLayout(selectedIndices, gridSlots, offsetX, offsetY);
+}
+
+/**
+ * 仅加载图片（不设置布局坐标），用于 canvas 隐藏时的预加载
+ */
+async function loadImagesOnly(selectedIndices, gridSlots) {
+  const loadTasks = selectedIndices.map((originalIndex, i) => {
+    return loadImageWithCover(originalIndex).then(({ img, imageData }) => {
+      imgList[i] = {
+        img,
+        x: 0,
+        y: 0,
+        originX: 0,
+        originY: 0,
+        id: i,
+        title: imageData.title || `星际档案 ${i + 1}`,
+        desc:
+          imageData.desc ||
+          `这是来自宇宙舞曲第 ${i + 1} 号深空探测器的视觉回传数据。`,
+      };
+    });
+  });
+
+  await Promise.all(loadTasks);
+  onImagesLoaded();
+}
+
+/**
+ * 加载图片并设置布局坐标
+ */
+async function loadImagesWithLayout(
+  selectedIndices,
+  gridSlots,
+  offsetX,
+  offsetY,
+) {
   const loadTasks = selectedIndices.map((originalIndex, i) => {
     const slotIndex = gridSlots[i];
     const colIndex = slotIndex % CONFIG.rowMax;
@@ -603,8 +666,8 @@ async function createImageData() {
       imgList[i] = {
         img,
         x,
-        y, // 当前画布坐标（实时变化）
-        originX: x, // 初始网格坐标（仅参考）
+        y,
+        originX: x,
         originY: y,
         id: i,
         title: imageData.title || `星际档案 ${i + 1}`,
@@ -613,16 +676,13 @@ async function createImageData() {
           `这是来自宇宙舞曲第 ${i + 1} 号深空探测器的视觉回传数据。`,
       };
 
-      // 单张就绪立即绘制，减少白屏等待
-      if (mode.value === "grid") {
+      if (mode.value === "grid" && ctx) {
         ctx.drawImage(img, x, y, CONFIG.imgWidth, CONFIG.imgHeight);
       }
     });
   });
 
   await Promise.all(loadTasks);
-
-  // 全部就绪后统一绘制一次，修正层级
   draw();
   onImagesLoaded();
 }
@@ -1204,10 +1264,31 @@ function exitStandby() {
 }
 
 /* =========================================
+   PagePreloader 内容可见回调：强制重新计算尺寸/布局
+   ========================================= */
+function onContentVisible() {
+  console.log(
+    "[CosmicArchive] 收到 PagePreloader content-visible 事件，强制重绘",
+  );
+  // 多轮尝试，确保尺寸稳定后再绘制
+  let attempts = 0;
+  const tryResize = () => {
+    attempts++;
+    resize();
+    if (attempts < 3) {
+      requestAnimationFrame(tryResize);
+    }
+  };
+  requestAnimationFrame(tryResize);
+}
+
+/* =========================================
    12. 生命周期
    ========================================= */
 onMounted(async () => {
   try {
+    // 声明当前页面属于 'cosmicArchive' 音频组
+    audioManager.ensureGroup("cosmicArchive");
     // 主题音乐模式：不需要从 sessionStorage 恢复，主题音乐会保持播放
     console.log("[CosmicArchive Page] 主题音乐模式，音乐由 audioManager 管理");
 
@@ -1261,6 +1342,72 @@ onMounted(async () => {
 });
 
 /**
+ * 尝试重新计算布局并绘制
+ * 当 canvas 从 display:none 变为可见后调用
+ */
+function tryRecalculateLayoutAndDraw() {
+  const canvas = canvasRef.value;
+  if (!canvas || !imgList || imgList.length === 0) return false;
+
+  // 重新获取尺寸
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) {
+    console.log("[CosmicArchive] tryRecalculateLayout: still 0 size");
+    return false;
+  }
+
+  // 更新 canvas 尺寸
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+  ctx = canvas.getContext("2d", { alpha: false });
+
+  // 【修复】如果之前因为 canvas 尺寸为 0 推迟了布局计算，现在重新计算
+  if (needsLayoutRecalc) {
+    console.log("[CosmicArchive] 重新计算网格布局（之前 canvas 尺寸为 0）");
+
+    // 重新计算网格居中偏移
+    const offsetX =
+      (canvas.width -
+        (CONFIG.rowMax * (CONFIG.imgWidth + CONFIG.imgMargin) -
+          CONFIG.imgMargin)) /
+      2;
+    const offsetY =
+      (canvas.height -
+        (CONFIG.lineMax * (CONFIG.imgHeight + CONFIG.imgMargin) -
+          CONFIG.imgMargin)) /
+      2;
+
+    // 重新分配坐标
+    const slotCount = Math.min(CONFIG.imgTotal, imgList.length);
+    for (let i = 0; i < slotCount; i++) {
+      const slotIndex = i;
+      const colIndex = slotIndex % CONFIG.rowMax;
+      const lineIndex = Math.floor(slotIndex / CONFIG.rowMax);
+      const x = offsetX + colIndex * (CONFIG.imgWidth + CONFIG.imgMargin);
+      const y = offsetY + lineIndex * (CONFIG.imgHeight + CONFIG.imgMargin);
+      if (imgList[i]) {
+        imgList[i].x = x;
+        imgList[i].y = y;
+        imgList[i].originX = x;
+        imgList[i].originY = y;
+      }
+    }
+    needsLayoutRecalc = false;
+
+    console.log(
+      "[CosmicArchive] 网格布局重新计算完成，canvas 尺寸:",
+      canvas.width,
+      "×",
+      canvas.height,
+    );
+  }
+
+  // 重绘
+  draw();
+  return true;
+}
+
+/**
  * 所有图片加载完成后调用
  */
 function onImagesLoaded() {
@@ -1268,33 +1415,53 @@ function onImagesLoaded() {
   setPageReady();
 
   // PagePreloader 使用 v-show 隐藏内容区，此时 canvas 被 display:none 隐藏
-  // Canvas 在隐藏状态下绘制的内容，变为可见后可能被浏览器清空
-  // 需要在 PagePreloader 完成淡出（~350ms）后重新绘制，确保内容正确显示
-  setTimeout(() => {
-    requestAnimationFrame(() => {
-      if (canvasRef.value && imgList.every((item) => item !== null)) {
-        console.log("[Cosmicswave] 延迟重绘，修正隐藏状态下的画布内容");
-        draw();
-      }
-    });
-  }, 400);
-  // 再做一次保险重绘，彻底杜绝黑屏
-  setTimeout(() => {
-    requestAnimationFrame(() => {
-      if (canvasRef.value && imgList.every((item) => item !== null)) {
-        draw();
-      }
-    });
-  }, 700);
+  // 需要在 PagePreloader 完成淡出（~350ms）后重新获取尺寸和重绘
+  const tryResizeMultiple = (attempt = 0) => {
+    setTimeout(
+      () => {
+        requestAnimationFrame(() => {
+          const success = tryRecalculateLayoutAndDraw();
+          if (!success && attempt < 5) {
+            console.log("[CosmicArchive] 重试尝试", attempt + 1);
+            tryResizeMultiple(attempt + 1);
+          } else if (success) {
+            console.log("[CosmicArchive] 延迟重绘完成");
+          }
+        });
+      },
+      150 * (attempt + 1),
+    );
+  };
+
+  tryResizeMultiple(0);
 }
 
 onDeactivated(() => {
   console.log("[CosmicArchive] 组件被缓存（离开），暂停动画");
   stopLoop();
+  window.removeEventListener("resize", resize);
+  window.removeEventListener("keydown", onKeyDown);
 });
 
 onActivated(() => {
   console.log("[CosmicArchive] 组件被激活（返回），恢复动画");
+  // 【修复】keep-alive 恢复时，canvas 可能因 DOM 变化而状态异常
+  // 重新获取尺寸并重绘
+  nextTick(() => {
+    const canvas = canvasRef.value;
+    if (canvas) {
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+        ctx = canvas.getContext("2d", { alpha: false });
+        draw();
+      }
+    }
+  });
+  // 恢复窗口事件监听
+  window.addEventListener("resize", resize);
+  window.addEventListener("keydown", onKeyDown);
   startLoop();
 });
 

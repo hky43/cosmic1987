@@ -120,7 +120,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted,
+  watch,
+  inject,
+  watchEffect,
+} from "vue";
 import { useRouter } from "vue-router";
 import { audioManager } from "../../../utils/audioManager";
 import { asset } from "../../../utils/asset";
@@ -270,7 +278,13 @@ watch(phase, (newVal, oldVal) => {
   }
 
   // 当从 Phase 1 返回 Phase 0 时，恢复首页音乐
+  // 除非是通过唱片跳转离开首页（音乐锁保持）
   if (newVal === 0 && oldVal === 1) {
+    if (isNavigatingAway.value) {
+      isNavigatingAway.value = false;
+      console.log("[LightMonologue] 跳转中，跳过恢复首页音乐");
+      return;
+    }
     audioManager.restoreHomeMusic();
   }
 });
@@ -476,7 +490,6 @@ const navigateTo = async (url) => {
   });
   if (props.autoNavigate && url) {
     console.log("[LightMonologue] 准备跳转到:", url);
-
     // 保存主题和音乐状态到 sessionStorage
     sessionStorage.setItem("themeMusicActive", "true");
     sessionStorage.setItem("currentThemeIndex", currentTheme.value.toString());
@@ -492,10 +505,15 @@ const navigateTo = async (url) => {
         fadeInDuration: 800,
         autoPlay: true,
       });
+      // 更新 currentGroup 到目标标签，确保 saveGroupState 存到正确组
+      // 这样刷新后才能根据标签恢复对应组的音乐
+      const targetTag = audioManager.getGroupFromPath(url);
+      audioManager.currentGroup.value = targetTag;
     }
 
     // 直接跳转，预加载统一由目标页面 PagePreloader 处理
     console.log("[LightMonologue] 跳转:", url);
+    isNavigatingAway.value = true;
     try {
       await router.push(url);
     } catch (err) {
@@ -559,6 +577,25 @@ defineExpose({
     stageRef.value?.focus();
   },
   getCurrentTheme: () => currentThemeData.value,
+});
+
+/* ======================== keep-alive：离开/返回首页时重置 phase ======================== */
+const pageActive = inject("isPageActive", ref(true));
+
+// 标记：通过唱片跳转离开首页时，防止 Phase 0 清理误调 restoreHomeMusic
+const isNavigatingAway = ref(false);
+
+watchEffect(() => {
+  if (!pageActive.value) {
+    // 离开首页 → 重置为 phase=0（隐藏），下次返回时不残留弧形切入状态
+    phase.value = 0;
+    // 清除预加载缓存，确保返回后重新加载资源
+    preloadedThemes.clear();
+    // 清除 sessionStorage 残留（navigateTo 写入的主题状态）
+    sessionStorage.removeItem("themeMusicActive");
+    sessionStorage.removeItem("currentThemeIndex");
+    sessionStorage.removeItem("currentThemeMusic");
+  }
 });
 
 onMounted(() => {
@@ -666,7 +703,7 @@ onUnmounted(() => {
 .white-curve {
   position: absolute;
   top: 0;
-  left: 45%;
+  left: 25%;
   width: 100%;
   height: 100%;
   background: white;

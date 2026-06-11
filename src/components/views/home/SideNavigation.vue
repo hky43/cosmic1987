@@ -16,6 +16,7 @@
       :class="{
         'is-wide': isWide,
         'menu-open': showMenu,
+        'nav-disabled': showProgressPage,
       }"
     >
       <!-- 时钟按钮：固定最左 -->
@@ -132,7 +133,7 @@ const handleBtnClick = () => {
 };
 
 const handleNavigate = (index) => {
-  // 只触发事件，由 HomePage 统一处理跳转逻辑
+  if (props.showProgressPage) return;
   emit("navigate", index);
 };
 
@@ -580,5 +581,18 @@ onUnmounted(() => {
     border-width: 2px;
     background: transparent;
   }
+}
+
+/* ========================================================
+   进度页激活时：禁用章节导航（保留时钟按钮）
+   ======================================================== */
+.side-nav.nav-disabled .nav-chapters {
+  pointer-events: none;
+  opacity: 0.3;
+}
+
+.side-nav.nav-disabled .nav-current {
+  pointer-events: none;
+  opacity: 0.3;
 }
 </style>
